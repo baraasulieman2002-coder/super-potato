@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stat, meter with context %}
+{% block title %}{{ t('nav.combined') }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ t('overview.title') }}</h1><span class="spacer"></span><button class="ghost no-print" onclick="window.print()">{{ t('common.print') }}</button></div>
+<p class="help">{{ t(o.note_key) }}</p>
+<h2>{{ t('overview.combined_totals') }}</h2>
+<div class="grid">
+  {{ stat(t('report.total_assets'), money(o.combined.total_assets_minor)) }}
+  {{ stat(t('report.total_liabilities'), money(o.combined.total_liabilities_minor)) }}
+  {{ stat(t('overview.combined_net_worth'), money(o.combined.net_worth_minor)) }}
+  {{ stat(t('overview.total_liquid'), money(o.combined.liquid_minor)) }}
+  {{ stat(t('overview.obligations_30d'), money(o.combined.obligations_30d_minor)) }}
+</div>
+<div class="grid" style="margin-top:14px">
+  {% for side in ['business', 'personal'] %}{% set s = o[side] %}
+  <div class="card" style="border-inline-start: 6px solid var(--{{ 'biz' if side == 'business' else 'per' }})">
+    <h2>{{ '🏪' if side == 'business' else '👤' }} {{ t('overview.' ~ side ~ '_section') }}</h2>
+    <table>
+      <tr><td>{{ t('report.total_assets') }}</td><td class="num">{{ money(s.total_assets_minor) }}</td></tr>
+      <tr><td>{{ t('report.total_liabilities') }}</td><td class="num">{{ money(s.total_liabilities_minor) }}</td></tr>
+      <tr class="total"><td>{{ t('overview.business_value' if side == 'business' else 'overview.personal_net_worth') }}</td><td class="num">{{ money(s.net_worth_minor) }}</td></tr>
+      <tr><td>{{ t('metric.liquid_cash') }}</td><td class="num">{{ money(s.liquid_minor) }}</td></tr>
+      <tr><td>{{ t('overview.obligations_30d') }}</td><td class="num">{{ money(s.obligations_30d_minor) }}</td></tr>
+    </table>
+    <h3>{{ t('overview.upcoming') }}</h3>
+    {% for u in s.upcoming %}<div class="small">{{ u.date }} · {{ t('forecast_event.' ~ u.kind) }} · {{ u.label }} · <span class="num">{{ money(u.amount_minor) }}</span>{% if u.overdue %} <span class="badge overdue">{{ t('bill_status.overdue') }}</span>{% endif %}</div>
+    {% else %}<div class="small muted">{{ t('common.none') }}</div>{% endfor %}
+    <h3>{{ t('nav.goals') }}</h3>
+    {% for g_ in s.goals %}<div class="small">{{ nm(g_) }} — {{ g_.progress_pct }}% {{ meter(g_.progress_pct) }}</div>
+    {% else %}<div class="small muted">{{ t('common.none') }}</div>{% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

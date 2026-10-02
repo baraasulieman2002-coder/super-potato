@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, badge, meter with context %}
+{% block title %}{{ t('nav.advisor') }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ t('nav.advisor') }}</h1><span class="spacer"></span>
+  <form method="post" class="inline" data-nopersist>{{ csrf_input() }}<input type="hidden" name="action" value="refresh"><button>{{ t('advisor.refresh') }}</button></form></div>
+<p class="flash warning">{{ t('advisor.disclaimer') }}</p>
+
+{% set h = m.health %}
+<div class="card">
+  <h2>{{ t('advisor.health_' ~ scope) }}: {% if h.score is not none %}<span class="num">{{ h.score }}/100</span>{% else %}—{% endif %}</h2>
+  {% if h.coverage_pct < 100 %}<p class="small muted">{{ t('advisor.partial_score', pct=h.coverage_pct) }}</p>{% endif %}
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('advisor.component') }}</th><th class="num">{{ t('col.value') }}</th><th>{{ t('advisor.scale') }}</th><th>{{ t('advisor.score') }}</th><th class="num">{{ t('advisor.weight') }}</th></tr>
+    {% for c in h.components %}
+    <tr><td>{{ t('metric.' ~ c.metric) }}</td><td class="num">{{ c.value if c.value is not none else '—' }}</td>
+      <td class="small">{{ t('advisor.scale_text', zero=c.zero_at, full=c.full_at) }}</td>
+      <td style="min-width:120px">{% if c.score is not none %}{{ meter(c.score) }}<span class="small">{{ c.score }}</span>{% else %}<span class="small muted">{{ t('advisor.no_data') }}</span>{% endif %}</td>
+      <td class="num">{{ c.weight }}%</td></tr>
+    {% endfor %}
+  </table></div>
+  <details><summary class="small">{{ t('advisor.key_figures') }} ({{ m.period[0] }} → {{ m.period[1] }})</summary>
+  <div class="grid small">
+    {% if scope == 'business' %}
+      <div>{{ t('metric.liquid_cash') }}: <span class="num">{{ money(m.liquid_minor) }}</span></div>
+      <div>{{ t('metric.working_capital') }}: <span class="num">{{ money(m.working_capital_minor) }}</span></div>
+      <div>{{ t('metric.cash_runway') }}: {{ m.cash_runway_months if m.cash_runway_months is not none else t('metric.not_burning') }}</div>
+      <div>{{ t('metric.gross_margin') }}: {{ m.gross_margin_pct if m.gross_margin_pct is not none else '—' }}%</div>
+      <div>{{ t('metric.net_margin_pct') }}: {{ m.net_margin_pct if m.net_margin_pct is not none else '—' }}%</div>
+      <div>{{ t('metric.dscr') }}: {{ m.values.dscr if m.values.dscr is not none else t('metric.no_debt') }}</div>
+      <div>{{ t('metric.avg_fixed_costs') }}: <span class="num">{{ money(m.avg_monthly_fixed_costs_minor) }}</span></div>
+      <div>{{ t('metric.inventory_turnover') }}: {{ m.inventory_turnover if m.inventory_turnover is not none else '—' }}</div>
+      <div>{{ t('metric.overdue_receivables') }}: <span class="num">{{ money(m.overdue_receivables_minor) }}</span></div>
+      <div>{{ t('metric.payables_14d') }}: <span class="num">{{ money(m.payables_due_14d_minor) }}</span></div>
+      <div class="muted">{{ t('metric.slow_moving_unavailable') }}</div>
+    {% else %}
+      <div>{{ t('metric.liquid_cash') }}: <span class="num">{{ money(m.liquid_minor + m.savings_minor) }}</span></div>
+      <div>{{ t('metric.avg_income') }}: <span class="num">{{ money(m.avg_monthly_income_minor) }}</span></div>
+      <div>{{ t('metric.avg_expenses') }}: <span class="num">{{ money(m.avg_monthly_expenses_minor) }}</span></div>
+      <div>{{ t('metric.monthly_debt') }}: <span class="num">{{ money(m.monthly_debt_service_minor) }}</span></div>
+      <div>{{ t('metric.credit_card_debt') }}: <span class="num">{{ money(m.credit_card_debt_minor) }}</span></div>
+      <div>{{ t('metric.obligations_30d') }}: <span class="num">{{ money(m.obligations_30d_minor) }}</span></div>
+    {% endif %}
+  </div>
+  <p class="help">{{ t('metrics.score_rules') }}</p></details>
+</div>
+
+<h2>{{ t('advisor.recommendations') }}</h2>
+{% for a in items %}
+<div class="card advice {{ a.severity }}">
+  <div class="toolbar">{{ badge(a.severity, 'severity.') }}<strong>{{ advice_text(a) }}</strong><span class="spacer"></span><span class="small muted">{{ a.as_of }}</span></div>
+  {% set e = a.evidence %}
+  <dl class="evidence">
+    <dt>{{ t('advisor.why') }}</dt><dd>{{ advice_text(a, 'why') }}</dd>
+    <dt>{{ t('advisor.numbers') }}</dt><dd>{% for label, value, unit in e.numbers %}<div>{{ num_label(label) }}: <span class="num">{{ num_value(value, unit) }}</span></div>{% endfor %}</dd>
+    <dt>{{ t('advisor.date_range') }}</dt><dd>{{ e.date_range[0] }} → {{ e.date_range[1] }}</dd>
+    <dt>{{ t('advisor.assumption') }}</dt><dd>{{ t(e.assumption, **e.assumption_params) }}</dd>
+    <dt>{{ t('advisor.benefit') }}</dt><dd>{{ t(e.benefit) }}</dd>
+    <dt>{{ t('advisor.risk') }}</dt><dd>{{ t(e.risk) }}</dd>
+  </dl>
+  <form method="post" class="inline" data-nopersist>
+    {{ csrf_input() }}<input type="hidden" name="advice_id" value="{{ a.id }}">
+    <input name="note" placeholder="{{ t('field.notes') }}">
+    <button name="decision" value="completed">{{ t('advice_action.completed') }}</button>
+    <button class="ghost" name="decision" value="dismissed">{{ t('advice_action.dismissed') }}</button>
+    <input type="date" name="postpone_until" value="{{ today }}">
+    <button class="ghost" name="decision" value="postponed">{{ t('advice_action.postponed') }}</button>
+  </form>
+</div>
+{% else %}
+<p class="muted">{{ t('advisor.none') }}</p>
+{% endfor %}
+
+<h2>{{ t('advisor.history') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('advisor.recommendation') }}</th><th>{{ t('col.status') }}</th><th>{{ t('advisor.decisions') }}</th></tr>
+  {% for a in history %}<tr><td>{{ a.as_of }}</td><td>{{ advice_text(a) }}</td><td>{{ t('advice_status.' ~ a.status) }}{% if a.postponed_until %} → {{ a.postponed_until }}{% endif %}</td>
+    <td class="small">{% for act in a.actions %}{{ act.at[:10] }} {{ t('advice_action.' ~ act.action) }}{% if act.note %} — {{ act.note }}{% endif %}<br>{% endfor %}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, badge with context %}
+{% block title %}{{ t('nav.recurring') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.recurring') }}</h1>
+<p class="help">{{ t('recurring.help') }}</p>
+
+{% if due %}
+<h2>{{ t('recurring.due_title') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('col.name') }}</th><th>{{ t('col.type') }}</th><th class="num">{{ t('col.amount') }}</th><th></th></tr>
+  {% for r in due %}
+  <tr><td>{{ r.next_date }}</td><td>{{ r.name }}</td><td>{{ t('recurring_kind.' ~ r.kind) }}</td><td class="num">{{ money(r.amount_minor) }}</td>
+    <td><form method="post" action="{{ url_for('confirm_recurring', profile=g.profile, rec_id=r.id) }}" class="inline" data-nopersist>
+      {{ csrf_input() }}
+      <input class="money" name="amount" placeholder="{{ money(r.amount_minor) }}">
+      <select name="account_id">{% for v, txt in acct_opts(pay_accounts) %}<option value="{{ v }}" {% if v == r.account_id %}selected{% endif %}>{{ txt }}</option>{% endfor %}</select>
+      <button name="decision" value="post">{{ t('recurring.confirm') }}</button>
+      <button class="ghost" name="decision" value="skip">{{ t('recurring.skip') }}</button>
+    </form></td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>{{ t('recurring.all') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.name') }}</th><th>{{ t('col.type') }}</th><th>{{ t('field.frequency') }}</th><th>{{ t('recurring.next') }}</th><th class="num">{{ t('col.amount') }}</th><th>{{ t('col.status') }}</th></tr>
+  {% for r in rows %}<tr class="{{ 'muted' if not r.is_active }}"><td>{{ r.name }}</td><td>{{ t('recurring_kind.' ~ r.kind) }}</td>
+    <td>{{ t('frequency.' ~ r.frequency) }}</td><td>{{ r.next_date }}</td><td class="num">{{ money(r.amount_minor) }}</td>
+    <td>{{ t('status.active') if r.is_active else t('status.inactive') }}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<details class="card" {% if request.method == 'POST' %}open{% endif %}>
+  <summary>{{ t('recurring.new') }}</summary>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ select('kind', t('col.type'), enum_opts(['income', 'expense', 'savings', 'planned_purchase'], 'recurring_kind.'), placeholder=false) }}
+    {{ field('name', t('col.name'), required=true) }}
+    {{ money_in('amount', t('col.amount')) }}
+    {{ select('frequency', t('field.frequency'), enum_opts(frequencies, 'frequency.'), placeholder=false, selected='monthly') }}
+    <div data-show-when="frequency=custom">{{ field('custom_interval_days', t('field.custom_interval_days'), 'number') }}</div>
+    {{ date('next_date', t('recurring.next')) }}
+    {{ date('end_date', t('field.end_date'), required=false) }}
+    <div data-show-when="kind=income">{{ select('income_category_id', t('col.category'), opts(inc_cats)) }}</div>
+    <div data-show-when="kind=expense|planned_purchase">{{ select('expense_category_id', t('col.category'), opts(exp_cats)) }}</div>
+    {{ select('account_id', t('field.payment_account'), acct_opts(pay_accounts), required=false) }}
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+{% endblock %}

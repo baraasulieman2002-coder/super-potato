@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stat with context %}
+{% block title %}{{ t('nav.forecast_combined') }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ t('nav.forecast_combined') }}</h1><span class="badge estimate">{{ t('forecast.estimate') }}</span><span class="spacer"></span>
+  {% for h in horizons %}<a class="btn {{ '' if cf.horizon_days == h else 'ghost' }}" href="?h={{ h }}">{{ t('forecast.h' ~ h) }}</a>{% endfor %}</div>
+<p class="help">{{ t('forecast.combined_note') }}</p>
+<div class="grid">
+  {% for side in ['business', 'personal'] %}{% set f = cf[side] %}
+  <div class="card" style="border-inline-start: 6px solid var(--{{ 'biz' if side == 'business' else 'per' }})">
+    <h3>{{ '🏪' if side == 'business' else '👤' }} {{ t('profile.' ~ side ~ '.short') }}</h3>
+    <div>{{ t('forecast.opening') }}: <span class="num">{{ money(f.opening_minor) }}</span></div>
+    <div>{{ t('forecast.closing') }}: <span class="num">{{ money(f.closing_minor) }}</span></div>
+    <div>{{ t('forecast.lowest_label') }}: <span class="num {{ 'neg' if f.lowest_balance_minor < 0 }}">{{ money(f.lowest_balance_minor) }}</span> · {{ f.lowest_balance_date }}</div>
+    {% if f.first_shortage_date %}<div class="neg">{{ t('forecast.shortage', days=f.days_until_shortage, date=f.first_shortage_date) }}</div>{% endif %}
+    <a href="{{ url_for('forecast_view', profile=side, h=cf.horizon_days) }}">{{ t('common.details') }}</a>
+  </div>
+  {% endfor %}
+  {{ stat(t('forecast.lowest_total'), money(cf.lowest_total_minor), 'neg' if cf.lowest_total_minor < 0 else '') }}
+</div>
+<div class="legend"><span><i style="background:var(--accent)"></i>{{ t('col.total') }}</span><span><i style="background:var(--biz)"></i>{{ t('profile.business.short') }}</span><span><i style="background:var(--per)"></i>{{ t('profile.personal.short') }}</span></div>
+{{ svg|safe }}
+{% endblock %}

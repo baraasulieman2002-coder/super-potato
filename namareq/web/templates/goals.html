@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, meter with context %}
+{% block title %}{{ t('nav.goals') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.goals') }}</h1>
+{% for g_ in rows %}
+<div class="card">
+  <div class="toolbar"><strong>{{ nm(g_) }}</strong> <span class="badge">{{ t('goal_type.' ~ g_.goal_type) }}</span>
+    <span class="badge">{{ t('goal.priority') }} {{ g_.priority }}</span><span class="spacer"></span>
+    {% if g_.remaining_minor == 0 %}<span class="badge paid">{{ t('goal.achieved') }}</span>
+    {% elif g_.on_track %}<span class="badge active">{{ t('goal.on_track') }}</span>{% else %}<span class="badge warning">{{ t('goal.behind') }}</span>{% endif %}</div>
+  {{ meter(g_.progress_pct) }}
+  <div class="grid small" style="margin-top:8px">
+    <div>{{ t('goal.current') }}: <span class="num">{{ money(g_.current_minor) }}</span> / <span class="num">{{ money(g_.target_minor) }}</span> ({{ g_.progress_pct }}%)</div>
+    <div>{{ t('goal.target_date') }}: {{ g_.target_date }} ({{ g_.months_left }} {{ t('unit.months') }})</div>
+    <div>{{ t('goal.required_monthly') }}: <span class="num">{{ money(g_.required_monthly_minor) }}</span></div>
+    <div>{{ t('goal.recent_pace') }}: <span class="num">{{ money(g_.recent_monthly_pace_minor) }}</span></div>
+    <div>{{ t('goal.forecast') }}: {{ g_.forecast_completion or t('goal.no_forecast') }} <span class="badge estimate">{{ t('forecast.estimate') }}</span></div>
+  </div>
+  {% if not g_.linked_account_id and g_.goal_type not in ('revenue_target', 'profit_target') %}
+  <form method="post" class="inline" data-nopersist>{{ csrf_input() }}<input type="hidden" name="action" value="contribute"><input type="hidden" name="goal_id" value="{{ g_.id }}">
+    <input class="money" name="amount" required placeholder="0.000"><input type="date" name="date" value="{{ today }}"><button class="ghost">{{ t('goal.add_contribution') }}</button></form>
+  {% elif g_.linked_account_id %}<p class="small muted">{{ t('goal.linked_note') }}</p>{% endif %}
+</div>
+{% else %}<p class="muted">{{ t('common.none') }}</p>{% endfor %}
+
+<details class="card" {% if not rows %}open{% endif %}>
+  <summary>{{ t('goal.new') }}</summary>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ select('goal_type', t('col.type'), enum_opts(goal_types, 'goal_type.')) }}
+    {{ field('name_ar', t('field.name_ar'), required=true, extra='dir="rtl"') }}
+    {{ field('name_en', t('field.name_en'), required=true, extra='dir="ltr"') }}
+    {{ money_in('target', t('goal.target')) }}
+    {{ money_in('starting', t('goal.starting'), required=false) }}
+    {{ date('start_date', t('field.from')) }}
+    {{ date('target_date', t('goal.target_date')) }}
+    {{ select('frequency', t('goal.contribution_frequency'), enum_opts(['weekly', 'monthly', 'quarterly'], 'frequency.'), placeholder=false, selected='monthly') }}
+    {{ select('linked_account_id', t('goal.linked_account'), acct_opts(link_accounts), required=false) }}
+    {{ select('priority', t('goal.priority'), [(1,'1'),(2,'2'),(3,'3'),(4,'4'),(5,'5')], placeholder=false, selected=3) }}
+    <p class="help wide">{{ t('goal.help') }}</p>
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, badge, stat with context %}
+{% block title %}{{ t('nav.debts') }}{% endblock %}
+{% macro aging(r, title) %}
+<h2>{{ title }} — {{ t('aging.as_of', date=as_of) }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.party') }}</th>{% for b in buckets %}<th class="num">{{ t('aging.' ~ b) }}</th>{% endfor %}<th class="num">{{ t('col.total') }}</th></tr>
+  {% for p in r.parties %}<tr><td>{{ p.party }}</td>{% for b in buckets %}<td class="num {{ 'neg' if b != 'current' and p[b] }}">{{ money(p[b]) if p[b] else '' }}</td>{% endfor %}<td class="num">{{ money(p.total) }}</td></tr>{% endfor %}
+  <tr class="total"><td>{{ t('col.total') }}</td>{% for b in buckets %}<td class="num">{{ money(r.totals[b]) }}</td>{% endfor %}<td class="num">{{ money(r.grand_total) }}</td></tr>
+</table></div>
+{% endmacro %}
+{% block content %}
+<h1>{{ t('nav.debts') }}</h1>
+<form method="get" class="toolbar" data-nopersist><label>{{ t('aging.as_of_label') }} <input type="date" name="as_of" value="{{ as_of }}"></label><button class="ghost">{{ t('common.filter') }}</button></form>
+
+{% if owner_bal %}
+<div class="grid">
+  {{ stat(t('transfer.business_owes_owner'), money(owner_bal.business_owes_owner_minor)) }}
+  {{ stat(t('transfer.owner_owes_business'), money(owner_bal.owner_owes_business_minor)) }}
+</div>
+{% endif %}
+{{ aging(recv, t('debt.receivables')) }}
+{{ aging(pay, t('debt.payables')) }}
+
+<h2>{{ t('debt.open') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.type') }}</th><th>{{ t('debt.debtor') }}</th><th>{{ t('debt.creditor') }}</th><th>{{ t('field.issue_date') }}</th><th>{{ t('field.due_date') }}</th>
+      <th class="num">{{ t('debt.original') }}</th><th class="num">{{ t('bills.remaining') }}</th><th></th></tr>
+  {% for d in rows %}
+  <tr><td>{{ t('debt_type.' ~ d.debt_type) }}</td><td>{{ d.debtor }}</td><td>{{ d.creditor }}</td><td>{{ d.issue_date }}</td><td>{{ d.due_date or '' }}</td>
+    <td class="num">{{ money(d.original_minor) }}</td><td class="num">{{ money(d.remaining_minor) }}</td>
+    <td><details><summary class="small">{{ t('common.actions') }}</summary>
+      <form method="post" action="{{ url_for('pay_debt', profile=g.profile, debt_id=d.id) }}" class="inline" data-nopersist>
+        {{ csrf_input() }}<input class="money" name="amount" value="{{ plain(d.remaining_minor) }}" required>
+        <input class="money" name="interest" placeholder="{{ t('debt.interest') }}">
+        <input type="date" name="date" value="{{ today }}">
+        <select name="account_id" required>{% for v, txt in acct_opts(pay_accounts) %}<option value="{{ v }}">{{ txt }}</option>{% endfor %}</select>
+        <button type="submit">{{ t('debt.record_payment') }}</button></form>
+      {% if d.direction == 'receivable' and is_owner %}
+      <form method="post" action="{{ url_for('pay_debt', profile=g.profile, debt_id=d.id) }}" class="inline" data-nopersist>
+        {{ csrf_input() }}<input type="hidden" name="action" value="write_off"><input type="date" name="date" value="{{ today }}">
+        <input name="reason" required placeholder="{{ t('field.reason') }}"><button class="danger">{{ t('debt.write_off') }}</button></form>
+      {% endif %}
+      {% if d.payments %}<div class="small">{{ t('debt.history') }}:{% for p in d.payments %} {{ p.pay_date }} <span class="num">{{ money(p.amount_minor) }}</span>;{% endfor %}</div>{% endif %}
+    </details></td></tr>
+  {% else %}<tr><td colspan="8" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<details class="card" {% if request.method == 'POST' %}open{% endif %}>
+  <summary>{{ t('debt.new') }}</summary>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ select('debt_type', t('col.type'), enum_opts(types, 'debt_type.')) }}
+    {{ field('debtor', t('debt.debtor'), required=true) }}
+    {{ field('creditor', t('debt.creditor'), required=true) }}
+    {{ money_in('amount', t('debt.original')) }}
+    {{ date('issue_date', t('field.issue_date')) }}
+    {{ date('due_date', t('field.due_date'), required=false) }}
+    {{ select('origin', t('debt.origin'), enum_opts(origins, 'origin.')) }}
+    <div data-show-when="origin=cash_lent|cash_borrowed">{{ select('cash_account_id', t('field.payment_account'), acct_opts(pay_accounts)) }}</div>
+    <div data-show-when="origin=credit_sale">{{ select('income_category_id', t('col.category'), opts(inc_cats)) }}</div>
+    <div data-show-when="origin=credit_purchase">{{ select('expense_category_id', t('col.category'), opts(exp_cats)) }}</div>
+    {{ field('annual_rate', t('loan.annual_rate'), value='0') }}
+    {{ field('reference', t('field.reference')) }}
+    <label class="wide">{{ t('debt.plan') }}<textarea name="plan" rows="3" dir="ltr" placeholder="2026-11-01 100.000&#10;2026-12-01 100.000">{{ request.form.get('plan','') }}</textarea></label>
+    <p class="help wide">{{ t('debt.origin_help') }}</p>
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+{% endblock %}

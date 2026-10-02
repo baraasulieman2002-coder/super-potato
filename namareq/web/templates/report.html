@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, badge, meter with context %}
+{% block title %}{{ t('report.' ~ name) }}{% endblock %}
+{% macro amount_rows(items) %}{% for x in items %}<tr><td>{{ nm(x) }}</td><td class="num">{{ money(x.amount_minor) }}</td></tr>{% endfor %}{% endmacro %}
+{% block content %}
+<div class="toolbar">
+  <h1>{{ t('report.' ~ name) }}</h1><span class="spacer"></span>
+  <button class="ghost no-print" onclick="window.print()">{{ t('common.print_pdf') }}</button>
+</div>
+<form method="get" class="toolbar" data-nopersist>
+  <label>{{ t('field.from') }} <input type="date" name="start" value="{{ start }}"></label>
+  <label>{{ t('field.to') }} / {{ t('aging.as_of_label') }} <input type="date" name="end" value="{{ end }}"></label>
+  <button class="ghost" type="submit">{{ t('common.filter') }}</button>
+</form>
+<p class="print-only">{{ t('report.period', start=start, end=end) }}</p>
+
+{% if name in ('profit_loss', 'income_expense', 'sales_gross_profit') %}
+  <div class="table-wrap"><table>
+    <tr><th colspan="2">{{ t('report.section.income') }}</th></tr>
+    {{ amount_rows(r.income) }}
+    <tr class="total"><td>{{ t('report.total_income') }}</td><td class="num">{{ money(r.total_income_minor) }}</td></tr>
+    {% if r.cost_of_sales %}
+      <tr><th colspan="2">{{ t('report.section.cost_of_sales') }}</th></tr>{{ amount_rows(r.cost_of_sales) }}
+      <tr class="total"><td>{{ t('report.gross_profit') }} ({{ r.gross_margin_pct or 0 }}%)</td><td class="num">{{ money(r.gross_profit_minor) }}</td></tr>
+    {% endif %}
+    {% if name != 'sales_gross_profit' %}
+      <tr><th colspan="2">{{ t('report.section.expenses') }}</th></tr>{{ amount_rows(r.expenses) }}
+      <tr class="total"><td>{{ t('report.total_expenses') }}</td><td class="num">{{ money(r.total_expenses_minor) }}</td></tr>
+      <tr class="total"><td>{{ t('report.net_profit' if g.profile == 'business' else 'report.net_savings') }}{% if r.net_margin_pct is not none %} ({{ r.net_margin_pct }}%){% endif %}</td>
+        <td class="num {{ 'neg' if r.net_minor < 0 }}">{{ money(r.net_minor) }}</td></tr>
+    {% endif %}
+  </table></div>
+  {% if g.profile == 'business' %}<p class="help">{{ t('report.owner_salary_note') }}</p>{% endif %}
+
+{% elif name in ('balance_sheet', 'net_worth') %}
+  <div class="table-wrap"><table>
+    <tr><th colspan="2">{{ t('report.section.assets') }}</th></tr>{{ amount_rows(r.assets) }}
+    <tr class="total"><td>{{ t('report.total_assets') }}</td><td class="num">{{ money(r.total_assets_minor) }}</td></tr>
+    <tr><th colspan="2">{{ t('report.section.liabilities') }}</th></tr>{{ amount_rows(r.liabilities) }}
+    <tr class="total"><td>{{ t('report.total_liabilities') }}</td><td class="num">{{ money(r.total_liabilities_minor) }}</td></tr>
+    {% if name == 'balance_sheet' %}
+    <tr><th colspan="2">{{ t('report.section.equity') }}</th></tr>{{ amount_rows(r.equity) }}
+    <tr><td>{{ t('report.retained_earnings') }}</td><td class="num">{{ money(r.retained_earnings_minor) }}</td></tr>
+    <tr class="total"><td>{{ t('report.total_equity') }}</td><td class="num">{{ money(r.total_equity_minor) }}</td></tr>
+    {% endif %}
+    <tr class="total"><td>{{ t('report.net_worth') }}</td><td class="num">{{ money(r.net_worth_minor) }}</td></tr>
+  </table></div>
+  <p>{{ badge('balanced' if r.balanced else 'critical', 'check.') }}</p>
+  {% if g.profile == 'personal' %}<p class="help">{{ t('report.personal_nw_note') }}</p>{% endif %}
+
+{% elif name == 'cash_flow' %}
+  <div class="table-wrap"><table>
+    <tr><td>{{ t('report.opening_cash') }}</td><td class="num">{{ money(r.opening_cash_minor) }}</td></tr>
+    {% for sec in ['operating', 'investing', 'financing'] %}
+      <tr><th colspan="2">{{ t('cash_flow.' ~ sec) }}</th></tr>
+      {% for k, v in r.detail[sec].items() %}<tr><td>&nbsp;&nbsp;{{ t('entry_type.' ~ k) }}</td><td class="num">{{ money(v) }}</td></tr>{% endfor %}
+      <tr class="total"><td>{{ t('cash_flow.net_' ~ sec) }}</td><td class="num">{{ money(r[sec ~ '_minor']) }}</td></tr>
+    {% endfor %}
+    <tr class="total"><td>{{ t('report.net_change') }}</td><td class="num">{{ money(r.net_change_minor) }}</td></tr>
+    <tr class="total"><td>{{ t('report.closing_cash') }}</td><td class="num">{{ money(r.closing_cash_minor) }}</td></tr>
+  </table></div>
+  <p>{{ badge('balanced' if r.reconciles else 'critical', 'check.') }} <span class="small muted">{{ t('report.cash_flow_note') }}</span></p>
+
+{% elif name == 'trial_balance' %}
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.item') }}</th><th>{{ t('col.type') }}</th><th class="num">{{ t('col.debit') }}</th><th class="num">{{ t('col.credit') }}</th></tr>
+    {% for x in r.lines %}<tr><td>{{ nm(x) }}</td><td>{{ t('account_type.' ~ x.type) }}</td><td class="num">{{ money(x.debit) if x.debit }}</td><td class="num">{{ money(x.credit) if x.credit }}</td></tr>{% endfor %}
+    <tr class="total"><td colspan="2">{{ t('col.total') }}</td><td class="num">{{ money(r.total_debit_minor) }}</td><td class="num">{{ money(r.total_credit_minor) }}</td></tr>
+  </table></div>
+  <p>{{ badge('balanced' if r.balanced else 'critical', 'check.') }}</p>
+
+{% elif name in ('expenses_by_category', 'expense_analysis') %}
+  <p class="muted">{{ t('report.month') }}: {{ r.month }} · {{ t('report.compared_with', start=r.history_window[0], end=r.history_window[1]) }}</p>
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.category') }}</th><th class="num">{{ t('col.amount') }}</th><th class="num">{{ t('report.share') }}</th><th class="num">{{ t('col.avg') }}</th><th class="num">{{ t('col.change') }}</th></tr>
+    {% for x in r.lines %}<tr><td>{{ nm(x) }}</td><td class="num">{{ money(x.amount_minor) }}</td><td class="num">{{ x.share_pct if x.share_pct is not none else '' }}%</td>
+      <td class="num">{{ money(x.avg_minor) }}</td><td class="num {{ 'neg' if x.change_pct and x.change_pct > 20 }}">{{ '%+.1f%%'|format(x.change_pct) if x.change_pct is not none else '—' }}</td></tr>{% endfor %}
+    <tr class="total"><td>{{ t('col.total') }}</td><td class="num">{{ money(r.total_minor) }}</td><td colspan="3"></td></tr>
+  </table></div>
+
+{% elif name == 'inventory_valuation' %}
+  <p>{{ t('report.inventory_book_value') }}: <strong class="num">{{ money(r.book_value_minor) }}</strong></p>
+  <p class="help">{{ t('report.inventory_note') }}</p>
+
+{% elif name in ('receivables', 'payables') %}
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.party') }}</th>{% for b in ['current','d1_30','d31_60','d61_90','d90_plus'] %}<th class="num">{{ t('aging.' ~ b) }}</th>{% endfor %}<th class="num">{{ t('col.total') }}</th></tr>
+    {% for p in r.parties %}<tr><td>{{ p.party }}</td>{% for b in ['current','d1_30','d31_60','d61_90','d90_plus'] %}<td class="num">{{ money(p[b]) if p[b] }}</td>{% endfor %}<td class="num">{{ money(p.total) }}</td></tr>{% endfor %}
+    <tr class="total"><td>{{ t('col.total') }}</td>{% for b in ['current','d1_30','d31_60','d61_90','d90_plus'] %}<td class="num">{{ money(r.totals[b]) }}</td>{% endfor %}<td class="num">{{ money(r.grand_total) }}</td></tr>
+  </table></div>
+
+{% elif name in ('loan_balances', 'loan_amortization') %}
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('loan.parties') }}</th><th class="num">{{ t('loan.principal') }}</th><th class="num">{{ t('loan.outstanding') }}</th><th class="num">{{ t('loan.paid_interest') }}</th><th class="num">{{ t('loan.remaining_interest') }}</th><th>{{ t('loan.maturity') }}</th><th>{{ t('col.status') }}</th></tr>
+    {% for l in r.loans %}<tr><td><a href="{{ url_for('loan_detail', profile=g.profile, loan_id=l.id) }}">{{ l.borrower }} ← {{ l.lender }}</a></td><td class="num">{{ money(l.principal_minor) }}</td>
+      <td class="num">{{ money(l.outstanding_principal_minor) }}</td><td class="num">{{ money(l.paid_interest_minor) }}</td><td class="num">{{ money(l.remaining_interest_minor) }}</td>
+      <td>{{ l.maturity_date }}</td><td>{{ badge(l.status, 'loan_status.') }}</td></tr>{% else %}<tr><td colspan="7" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+  </table></div>
+
+{% elif name == 'tax_summary' %}
+  <div class="table-wrap"><table>
+    <tr><td>{{ t('tax.output') }}</td><td class="num">{{ money(r.output_tax_minor) }}</td></tr>
+    <tr><td>{{ t('tax.input') }}</td><td class="num">{{ money(r.input_tax_minor) }}</td></tr>
+    <tr class="total"><td>{{ t('tax.net') }}</td><td class="num">{{ money(r.net_payable_minor) }}</td></tr>
+    <tr><td>{{ t('tax.balance') }}</td><td class="num">{{ money(r.balance_payable_minor) }}</td></tr>
+    <tr><td>{{ t('tax.other') }}</td><td class="num">{{ money(r.other_taxes_expensed_minor) }}</td></tr>
+  </table></div>
+  <p class="flash warning">{{ t(r.notice_key) }}</p>
+
+{% elif name == 'owner_equity' %}
+  <div class="grid">{% for k, v in r.totals.items() %}<div class="stat"><span class="k">{{ t('equity_kind.' ~ k) }}</span><span class="v">{{ money(v) }}</span></div>{% endfor %}</div>
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.date') }}</th><th>{{ t('col.type') }}</th><th>{{ t('col.description') }}</th><th class="num">{{ t('col.amount') }}</th></tr>
+    {% for i in r['items'] %}<tr><td>{{ i.txn_date }}</td><td>{{ t('equity_kind.' ~ i.kind) }}</td><td>{{ i.description }}</td><td class="num">{{ money(i.amount_minor) }}</td></tr>{% else %}<tr><td colspan="4" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+  </table></div>
+
+{% elif name == 'register_reconciliation' %}
+  {% include 'reconciliation_table.html' %}
+
+{% elif name == 'bills_report' %}
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('field.due_date') }}</th><th>{{ t('field.payee') }}</th><th class="num">{{ t('col.total') }}</th><th class="num">{{ t('bills.paid') }}</th><th>{{ t('col.status') }}</th></tr>
+    {% for b in r.rows %}<tr><td>{{ b.due_date }}</td><td>{{ b.payee }}</td><td class="num">{{ money(b.total_minor) }}</td><td class="num">{{ money(b.paid_minor) }}</td><td>{{ badge(b.status, 'bill_status.') }}</td></tr>{% else %}<tr><td colspan="5" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+  </table></div>
+
+{% elif name == 'debt_report' %}
+  {% for key, title in [('recv', 'debt.receivables'), ('pay', 'debt.payables')] %}{% set a = r[key] %}
+  <h2>{{ t(title) }}</h2>
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.party') }}</th>{% for b in ['current','d1_30','d31_60','d61_90','d90_plus'] %}<th class="num">{{ t('aging.' ~ b) }}</th>{% endfor %}<th class="num">{{ t('col.total') }}</th></tr>
+    {% for p in a.parties %}<tr><td>{{ p.party }}</td>{% for b in ['current','d1_30','d31_60','d61_90','d90_plus'] %}<td class="num">{{ money(p[b]) if p[b] }}</td>{% endfor %}<td class="num">{{ money(p.total) }}</td></tr>{% endfor %}
+    <tr class="total"><td>{{ t('col.total') }}</td>{% for b in ['current','d1_30','d31_60','d61_90','d90_plus'] %}<td class="num">{{ money(a.totals[b]) }}</td>{% endfor %}<td class="num">{{ money(a.grand_total) }}</td></tr>
+  </table></div>{% endfor %}
+
+{% elif name == 'savings' %}
+  <p>{{ t('report.savings_rate', pct=r.savings_rate_pct if r.savings_rate_pct is not none else '—') }} · {{ t('report.total_saved') }}: <span class="num">{{ money(r.total_saved_minor) }}</span></p>
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('nav.accounts') }}</th><th class="num">{{ t('report.net_in') }}</th><th class="num">{{ t('col.balance') }}</th></tr>
+    {% for a in r.accounts %}<tr><td>{{ nm(a) }}</td><td class="num">{{ money(a.net_in_minor) }}</td><td class="num">{{ money(a.balance_minor) }}</td></tr>{% else %}<tr><td colspan="3" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+  </table></div>
+
+{% elif name == 'goal_progress' %}
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.name') }}</th><th>{{ t('loan.progress') }}</th><th class="num">{{ t('goal.current') }}</th><th class="num">{{ t('goal.target') }}</th><th class="num">{{ t('goal.required_monthly') }}</th><th>{{ t('goal.forecast') }}</th></tr>
+    {% for g_ in r.goals %}<tr><td>{{ nm(g_) }}</td><td style="min-width:110px">{{ meter(g_.progress_pct) }}{{ g_.progress_pct }}%</td><td class="num">{{ money(g_.current_minor) }}</td>
+      <td class="num">{{ money(g_.target_minor) }}</td><td class="num">{{ money(g_.required_monthly_minor) }}</td><td>{{ g_.forecast_completion or '—' }}</td></tr>{% else %}<tr><td colspan="6" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+  </table></div>
+
+{% elif name == 'budget_vs_actual' %}
+  {% for bva in r.budgets %}
+  <h2><a href="{{ url_for('budget_detail', profile=g.profile, budget_id=bva.budget.id) }}">{{ bva.budget.name }}</a> ({{ bva.budget.start_date }} → {{ bva.budget.end_date }})</h2>
+  <div class="table-wrap"><table>
+    <tr><th>{{ t('col.category') }}</th><th class="num">{{ t('budget.budgeted') }}</th><th class="num">{{ t('budget.actual') }}</th><th class="num">{{ t('bills.remaining') }}</th><th class="num">{{ t('budget.used') }}</th></tr>
+    {% for l in bva.lines %}<tr><td>{{ ((l.inc_ar or l.exp_ar) if lang == 'ar' else (l.inc_en or l.exp_en)) or t('line_type.' ~ l.line_type) }}</td><td class="num">{{ money(l.budgeted_minor) }}</td><td class="num">{{ money(l.actual_minor) }}</td>
+      <td class="num {{ 'neg' if l.remaining_minor < 0 }}">{{ money(l.remaining_minor) }}</td><td class="num">{{ l.pct_used if l.pct_used is not none else '—' }}%</td></tr>{% endfor %}
+  </table></div>
+  {% else %}<p class="muted">{{ t('common.none') }}</p>{% endfor %}
+
+{% elif name == 'monthly_summary' %}
+  <div class="grid">
+    <div class="stat"><span class="k">{{ t('report.total_income') }}</span><span class="v">{{ money(r.income_minor) }}</span></div>
+    <div class="stat"><span class="k">{{ t('report.total_expenses') }}</span><span class="v">{{ money(r.expenses_minor) }}</span></div>
+    <div class="stat"><span class="k">{{ t('report.net_savings') }}</span><span class="v">{{ money(r.net_minor) }}</span></div>
+    <div class="stat"><span class="k">{{ t('report.net_worth') }}</span><span class="v">{{ money(r.net_worth_minor) }}</span></div>
+    <div class="stat"><span class="k">{{ t('report.net_worth_change') }}</span><span class="v">{{ money(r.net_worth_change_minor) }}</span></div>
+    {% if r.savings %}<div class="stat"><span class="k">{{ t('metric.savings_rate_pct') }}</span><span class="v">{{ r.savings.savings_rate_pct if r.savings.savings_rate_pct is not none else '—' }}%</span></div>{% endif %}
+  </div>
+  <h2>{{ t('report.top_expenses') }}</h2>
+  <div class="table-wrap"><table>{{ amount_rows(r.top_expenses) }}</table></div>
+{% endif %}
+
+<div class="card no-print">
+  <h3>{{ t('export.title') }}</h3>
+  <form method="post" action="{{ url_for('report_export', profile=g.profile, name=name) }}" class="stack" data-nopersist>
+    {{ csrf_input() }}<input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}">
+    {% if g.profile == 'personal' %}
+      <p class="help wide">🔒 {{ t('export.personal_protected') }}</p>
+      <label>{{ t('access.owner_password') }} *<input type="password" name="owner_password" required autocomplete="current-password"></label>
+      <label>{{ t('export.passphrase') }} *<input type="password" name="passphrase" required minlength="10" autocomplete="new-password"></label>
+    {% endif %}
+    <button class="ghost" type="submit">{{ t('export.csv') }}</button>
+  </form>
+</div>
+{% endblock %}

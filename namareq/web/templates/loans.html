@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, check, badge, meter with context %}
+{% block title %}{{ t('nav.loans') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.loans') }}</h1>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('loan.parties') }}</th><th>{{ t('col.type') }}</th><th class="num">{{ t('loan.principal') }}</th><th class="num">{{ t('loan.outstanding') }}</th>
+      <th class="num">{{ t('loan.installment') }}</th><th>{{ t('loan.next_payment') }}</th><th>{{ t('loan.progress') }}</th><th>{{ t('col.status') }}</th></tr>
+  {% for l in rows %}
+  <tr>
+    <td><a href="{{ url_for('loan_detail', profile=g.profile, loan_id=l.id) }}">{{ l.borrower }} ← {{ l.lender }}</a>
+        <div class="small muted">{{ t('loan_role.' ~ l.role) }}</div></td>
+    <td>{{ t('loan_type.' ~ l.loan_type) }}</td>
+    <td class="num">{{ money(l.principal_minor) }}</td>
+    <td class="num">{{ money(l.outstanding_principal_minor) }}</td>
+    <td class="num">{{ money(l.installment_minor) }}</td>
+    <td>{{ l.next_installment.due_date if l.next_installment else '—' }}</td>
+    <td style="min-width:110px">{{ meter(l.progress_pct) }}<span class="small">{{ l.progress_pct }}%</span></td>
+    <td>{{ badge(l.status, 'loan_status.') }}{% if l.missed_count %} <span class="badge overdue">{{ t('loan.missed', count=l.missed_count) }}</span>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<div class="card">
+  <h2>{{ t('loan.calculator') }}</h2>
+  <form method="get" class="stack" data-nopersist>
+    <input type="hidden" name="preview" value="1">
+    <label>{{ t('loan.principal') }}<input class="money" name="principal" value="{{ request.args.get('principal','') }}" required></label>
+    <label>{{ t('loan.annual_rate') }}<input name="rate" value="{{ request.args.get('rate','0') }}" inputmode="decimal"></label>
+    <label>{{ t('loan.term_count') }}<input type="number" name="n" min="1" value="{{ request.args.get('n','12') }}"></label>
+    <label>{{ t('field.frequency') }}<select name="frequency">{% for v in frequencies %}<option value="{{ v }}" {% if request.args.get('frequency','monthly') == v %}selected{% endif %}>{{ t('frequency.' ~ v) }}</option>{% endfor %}</select></label>
+    <label>{{ t('loan.method') }}<select name="method">{% for v in methods %}<option value="{{ v }}" {% if request.args.get('method') == v %}selected{% endif %}>{{ t('interest_method.' ~ v) }}</option>{% endfor %}</select></label>
+    <label>{{ t('loan.first_payment_date') }}<input type="date" name="first" value="{{ request.args.get('first', today) }}"></label>
+    <button class="ghost" type="submit">{{ t('loan.calculate') }}</button>
+  </form>
+  {% if preview %}
+    <p><strong>{{ t('loan.installment') }}: <span class="num">{{ money(preview.rows[0].payment_minor) }}</span></strong> ·
+       {{ t('loan.total_interest') }}: <span class="num">{{ money(preview.totals.total_interest_minor) }}</span> ·
+       {{ t('loan.total_paid') }}: <span class="num">{{ money(preview.totals.total_paid_minor) }}</span></p>
+    {% set a = preview.affordability %}
+    <p class="help">{{ t('loan.affordability', before=a.ratio_before_pct if a.ratio_before_pct is not none else '—', after=a.ratio_after_pct if a.ratio_after_pct is not none else '—', guide=a.guideline_pct, start=a.period[0], end=a.period[1]) }}
+      — {{ t('loan.avg_income') }}: {{ money(a.avg_monthly_income_minor) }}</p>
+    <details><summary>{{ t('loan.schedule') }} ({{ preview.rows|length }})</summary>
+    <div class="table-wrap"><table>
+      <tr><th>#</th><th>{{ t('field.due_date') }}</th><th class="num">{{ t('loan.principal_part') }}</th><th class="num">{{ t('loan.interest_part') }}</th><th class="num">{{ t('loan.payment') }}</th><th class="num">{{ t('loan.balance_after') }}</th></tr>
+      {% for r in preview.rows %}<tr><td>{{ r.seq }}</td><td>{{ r.due_date }}</td><td class="num">{{ money(r.principal_minor) }}</td><td class="num">{{ money(r.interest_minor) }}</td><td class="num">{{ money(r.payment_minor) }}</td><td class="num">{{ money(r.closing_minor) }}</td></tr>{% endfor %}
+    </table></div></details>
+  {% endif %}
+  <details><summary class="small">{{ t('loan.assumptions_title') }}</summary><p class="help">{{ t('loan.assumptions') }}</p></details>
+</div>
+
+<details class="card" {% if request.method == 'POST' %}open{% endif %}>
+  <summary>{{ t('loan.new') }}</summary>
+  <p class="help">{{ t('loan.owner_loans_elsewhere') }}</p>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ select('role', t('loan.role'), enum_opts(['borrower', 'lender'], 'loan_role.'), placeholder=false) }}
+    {{ select('loan_type', t('col.type'), enum_opts(loan_types, 'loan_type.')) }}
+    {{ field('borrower', t('loan.borrower'), required=true) }}
+    {{ field('lender', t('loan.lender'), required=true) }}
+    {{ money_in('principal', t('loan.principal')) }}
+    {{ field('annual_rate', t('loan.annual_rate'), value='0', extra='inputmode="decimal"') }}
+    {{ select('interest_method', t('loan.method'), enum_opts(methods, 'interest_method.'), placeholder=false) }}
+    {{ select('frequency', t('field.frequency'), enum_opts(frequencies, 'frequency.'), placeholder=false, selected='monthly') }}
+    {{ field('term_count', t('loan.term_count'), 'number', required=true, extra='min="1"') }}
+    {{ date('start_date', t('loan.start_date')) }}
+    {{ date('first_payment_date', t('loan.first_payment_date')) }}
+    {{ select('cash_account_id', t('loan.cash_account'), acct_opts(pay_accounts)) }}
+    {{ money_in('fees', t('loan.fees'), required=false) }}
+    {{ field('early_fee_pct', t('loan.early_fee_pct'), value='0') }}
+    {{ field('collateral', t('loan.collateral')) }}
+    {{ field('early_conditions', t('loan.early_conditions'), cls='wide') }}
+    {{ check('existing_loan', t('loan.existing')) }}
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+{% endblock %}

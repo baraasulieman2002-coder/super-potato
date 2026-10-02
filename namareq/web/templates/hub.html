@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stat with context %}
+{% block content %}
+<h1>{{ t('hub.title') }}</h1>
+<p class="muted">{{ t('hub.intro') }}</p>
+{% if not kinds %}
+  <div class="card">{{ t('hub.no_access') }}</div>
+{% endif %}
+<div class="grid">
+  {% if 'business' in kinds %}
+  <a class="card" style="text-decoration:none; border-inline-start: 6px solid var(--biz)" href="{{ url_for('dashboard', profile='business') }}">
+    <h2>🏪 {{ t('nav.business_finance') }}</h2>
+    <p class="muted">{{ t('hub.business_desc') }}</p>
+    {% if business %}
+      <div class="small">{{ t('metric.liquid_cash') }}: <span class="num">{{ money(business.liquid) }}</span></div>
+      <div class="small">{{ t('bills.overdue') }}: {{ business.alerts.overdue|length }} · {{ t('bills.due_today') }}: {{ business.alerts.due_today|length }}</div>
+    {% endif %}
+  </a>
+  {% endif %}
+  {% if 'personal' in kinds %}
+  {# Personal figures are deliberately not shown on this shared landing page. #}
+  <a class="card" style="text-decoration:none; border-inline-start: 6px solid var(--per)" href="{{ url_for('dashboard', profile='personal') }}">
+    <h2>👤 {{ t('nav.personal_finance') }}</h2>
+    <p class="muted">{{ t('hub.personal_desc') }}</p>
+    <span class="badge">🔒 {{ t('profile.personal.private') }}</span>
+  </a>
+  {% endif %}
+  {% if can_combined %}
+  <a class="card" style="text-decoration:none; border-inline-start: 6px solid var(--cmb)" href="{{ url_for('overview') }}">
+    <h2>⚖️ {{ t('nav.combined') }}</h2>
+    <p class="muted">{{ t('hub.combined_desc') }}</p>
+  </a>
+  {% endif %}
+</div>
+{% endblock %}

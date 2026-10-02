@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field with context %}
+{% block title %}{{ t('auth.login') }}{% endblock %}
+{% block content %}
+<div class="card login">
+  <h1>{{ t('auth.login') }}</h1>
+  <form method="post" class="stack" data-nopersist>
+    {{ csrf_input() }}
+    {{ field('username', t('auth.username'), required=true, cls='wide', extra='autocomplete="username"') }}
+    <label class="wide">{{ t('auth.password') }} *<input type="password" name="password" required autocomplete="current-password"></label>
+    <button type="submit" class="wide">{{ t('auth.login') }}</button>
+  </form>
+</div>
+{% endblock %}

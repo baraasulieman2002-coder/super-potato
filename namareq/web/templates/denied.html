@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('error.access_denied') }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>🔒 {{ t('error.access_denied') }}</h1>
+  <p>{{ t('denied.explain') }}</p>
+  {% if scope == 'personal' %}<p class="muted">{{ t('denied.personal') }}</p>{% endif %}
+  <a class="btn ghost" href="{{ url_for('hub') }}">{{ t('common.back') }}</a>
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, check with context %}
+{% block title %}{{ t('nav.accounts') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.accounts') }}</h1>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.name') }}</th><th>{{ t('col.type') }}</th><th>{{ t('field.institution') }}</th><th>{{ t('field.account_ref') }}</th>
+      <th class="num">{{ t('col.balance') }}</th><th class="num">{{ t('field.credit_limit') }}</th><th>{{ t('col.status') }}</th><th></th></tr>
+  {% for a in rows %}
+  <tr class="{{ 'muted' if not a.is_active }}">
+    <td>{{ nm(a) }}{% if a.system_code %} <span class="badge">{{ t('account.system') }}</span>{% endif %}</td>
+    <td>{{ t('account_type.' ~ a.account_type) }}</td>
+    <td>{{ a.institution or '' }}</td>
+    <td class="num">{{ a.account_ref_masked or '' }}</td>
+    <td class="num {{ 'neg' if a.balance_minor < 0 }}">{{ money(a.balance_minor, a.currency) }}</td>
+    <td class="num">{{ money(a.credit_limit_minor, a.currency) if a.credit_limit_minor else '' }}</td>
+    <td>{{ t('status.active') if a.is_active else t('status.inactive') }}</td>
+    <td>{% if not a.system_code %}
+      <form method="post" action="{{ url_for('account_toggle', profile=g.profile, account_id=a.id) }}" class="inline" data-nopersist>
+        {{ csrf_input() }}<button class="ghost" type="submit">{{ t('common.deactivate') if a.is_active else t('common.activate') }}</button>
+      </form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<details class="card" {% if request.method == 'POST' %}open{% endif %}>
+  <summary>{{ t('account.new') }}</summary>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ select('account_type', t('col.type'), enum_opts(types, 'account_type.')) }}
+    {{ field('name_ar', t('field.name_ar'), required=true, extra='dir="rtl" lang="ar"') }}
+    {{ field('name_en', t('field.name_en'), required=true, extra='dir="ltr" lang="en"') }}
+    {{ select('currency', t('field.currency'), [('JOD','JOD'),('USD','USD'),('EUR','EUR'),('SAR','SAR'),('AED','AED')], placeholder=false) }}
+    {{ money_in('opening_balance', t('field.opening_balance'), required=false) }}
+    {{ date('opening_date', t('field.opening_date'), required=false) }}
+    {{ field('institution', t('field.institution')) }}
+    {{ field('account_ref', t('field.account_ref'), extra='autocomplete="off"') }}
+    {{ money_in('credit_limit', t('field.credit_limit'), required=false) }}
+    {{ field('statement_day', t('field.statement_day'), 'number', extra='min="1" max="31"') }}
+    {{ field('payment_due_day', t('field.payment_due_day'), 'number', extra='min="1" max="31"') }}
+    {{ field('interest_rate', t('field.interest_rate'), extra='inputmode="decimal"') }}
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    <p class="help wide">{{ t('account.security_note') }}</p>
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+
+<details class="card">
+  <summary>{{ t('transfer.internal') }}</summary>
+  <p class="help">{{ t('transfer.internal_help') }}</p>
+  <form method="post" action="{{ url_for('internal_transfer', profile=g.profile) }}" class="stack">
+    {{ csrf_input() }}
+    {{ select('from_account', t('field.from_account'), acct_opts(money_accounts)) }}
+    {{ select('to_account', t('field.to_account'), acct_opts(money_accounts)) }}
+    {{ money_in('amount', t('col.amount')) }}
+    {{ date('date', t('col.date')) }}
+    {{ field('description', t('col.description')) }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+{% endblock %}

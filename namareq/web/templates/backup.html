@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input with context %}
+{% block title %}{{ t('nav.backup') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.backup') }}</h1>
+<div class="grid">
+  <div class="card" style="border-inline-start: 6px solid var(--biz)">
+    <h2>🏪 {{ t('backup.business') }}</h2>
+    <p class="help">{{ t('backup.business_help') }}</p>
+    <form method="post" data-nopersist>{{ csrf_input() }}<input type="hidden" name="scope" value="business"><button>{{ t('backup.download') }}</button></form>
+  </div>
+  {% if is_owner %}
+  <div class="card" style="border-inline-start: 6px solid var(--per)">
+    <h2>👤 {{ t('backup.personal') }}</h2>
+    <p class="help">🔒 {{ t('backup.personal_help') }}</p>
+    <form method="post" class="stack" data-nopersist>{{ csrf_input() }}<input type="hidden" name="scope" value="personal">
+      <label class="wide">{{ t('access.owner_password') }} *<input type="password" name="owner_password" required autocomplete="current-password"></label>
+      <label class="wide">{{ t('export.passphrase') }} *<input type="password" name="passphrase" required minlength="10" autocomplete="new-password"></label>
+      <button type="submit">{{ t('backup.download_encrypted') }}</button></form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

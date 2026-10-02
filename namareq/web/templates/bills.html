@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, check, badge, stat with context %}
+{% block title %}{{ t('nav.bills') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.bills') }}</h1>
+<div class="grid">
+  {{ stat(t('bills.overdue'), alerts.overdue|length, 'neg' if alerts.overdue else '') }}
+  {{ stat(t('bills.due_today'), alerts.due_today|length) }}
+  {{ stat(t('bills.upcoming'), alerts.upcoming|length) }}
+</div>
+{% if alerts.autopay_to_confirm %}<p class="help">{{ t('bills.autopay_confirm', count=alerts.autopay_to_confirm|length) }}</p>{% endif %}
+
+<h2>{{ t('bills.open') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('field.due_date') }}</th><th>{{ t('field.payee') }}</th><th>{{ t('col.category') }}</th><th>{{ t('field.frequency') }}</th>
+      <th class="num">{{ t('col.total') }}</th><th class="num">{{ t('bills.paid') }}</th><th class="num">{{ t('bills.remaining') }}</th><th>{{ t('col.status') }}</th><th></th></tr>
+  {% for b in rows %}
+  <tr>
+    <td>{{ b.due_date }}</td>
+    <td><a href="{{ url_for('bill_detail', profile=g.profile, bill_id=b.id) }}">{{ b.payee }}</a>{% if b.autopay %} <span class="badge">{{ t('bills.autopay') }}</span>{% endif %}
+        <div class="small muted">{{ b.description or '' }}</div></td>
+    <td>{{ b.cat_ar if lang == 'ar' else b.cat_en }}</td>
+    <td>{{ t('frequency.' ~ b.frequency) }}</td>
+    <td class="num">{{ money(b.total_minor, b.currency) }}</td>
+    <td class="num">{{ money(b.paid_minor, b.currency) }}</td>
+    <td class="num">{{ money(b.remaining_minor, b.currency) }}</td>
+    <td>{{ badge(b.status, 'bill_status.') }}{% if b.paid_minor and b.status == 'overdue' %} {{ badge('partially_paid', 'bill_status.') }}{% endif %}</td>
+    <td><details><summary class="small">{{ t('bills.pay') }}</summary>
+      <form method="post" action="{{ url_for('pay_bill', profile=g.profile, bill_id=b.id) }}" class="inline" data-nopersist>
+        {{ csrf_input() }}
+        <input class="money" name="amount" value="{{ plain(b.remaining_minor) }}" required>
+        <input type="date" name="date" value="{{ today }}">
+        <select name="account_id" required>{% for v, txt in acct_opts(pay_accounts) %}<option value="{{ v }}" {% if v == b.payment_account_id %}selected{% endif %}>{{ txt }}</option>{% endfor %}</select>
+        <button type="submit">{{ t('common.mark_paid') }}</button>
+      </form>
+      <form method="post" action="{{ url_for('cancel_bill', profile=g.profile, bill_id=b.id) }}" class="inline" data-nopersist>
+        {{ csrf_input() }}<label class="check"><input type="checkbox" name="stop_series" value="1"> {{ t('bills.stop_series') }}</label>
+        <button class="ghost" type="submit">{{ t('common.cancel') }}</button></form>
+    </details></td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>{{ t('bills.calendar') }} — {{ month }}</h2>
+<div class="toolbar">
+  <a class="btn ghost" href="?month={{ prev_month }}">‹ {{ prev_month }}</a>
+  <a class="btn ghost" href="?month={{ next_month }}">{{ next_month }} ›</a>
+</div>
+<div class="table-wrap"><table class="cal">
+  <tr>{% for d in ['sun','mon','tue','wed','thu','fri','sat'] %}<th>{{ t('weekday.' ~ d) }}</th>{% endfor %}</tr>
+  {% for week in calendar %}<tr>
+    {% for cell in week %}
+      {% if cell %}<td class="{{ 'today' if (month ~ '-' ~ '%02d'|format(cell[0])) == today }}"><div class="d">{{ cell[0] }}</div>
+        {% for b in cell[1] %}<div>{{ badge(b.status, 'bill_status.') }} {{ b.payee }} <span class="num">{{ money(b.remaining_minor or b.total_minor) }}</span></div>{% endfor %}</td>
+      {% else %}<td></td>{% endif %}
+    {% endfor %}</tr>{% endfor %}
+</table></div>
+
+<h2>{{ t('bills.forecast') }} <span class="badge estimate">{{ t('forecast.estimate') }}</span></h2>
+<div class="table-wrap"><table>
+  <tr>{% for m in forecast %}<th class="num">{{ m.month }}</th>{% endfor %}</tr>
+  <tr>{% for m in forecast %}<td class="num">{{ money(m.amount_minor) }}</td>{% endfor %}</tr>
+</table></div>
+
+<details class="card" {% if request.method == 'POST' %}open{% endif %}>
+  <summary>{{ t('bills.new') }}</summary>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ field('payee', t('field.payee'), required=true) }}
+    {{ select('category_id', t('col.category'), opts(categories)) }}
+    {{ field('description', t('col.description')) }}
+    {{ money_in('amount', t('col.amount')) }}
+    {{ money_in('tax', t('field.tax'), required=false) }}
+    {{ date('issue_date', t('field.issue_date'), required=false) }}
+    {{ date('due_date', t('field.due_date')) }}
+    {{ date('period_start', t('field.period_start'), required=false) }}
+    {{ date('period_end', t('field.period_end'), required=false) }}
+    {{ select('frequency', t('field.frequency'), enum_opts(frequencies, 'frequency.'), placeholder=false) }}
+    <div data-show-when="frequency=custom">{{ field('custom_interval_days', t('field.custom_interval_days'), 'number', extra='min="1"') }}</div>
+    {{ select('payment_account_id', t('field.payment_account'), acct_opts(pay_accounts), required=false) }}
+    {{ field('reminder_days', t('field.reminder_days'), value='7,1,0') }}
+    {{ check('autopay', t('bills.autopay_indicator')) }}
+    {{ check('allow_duplicate', t('bills.allow_duplicate')) }}
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    <p class="help wide">{{ t('bills.cash_basis_note') }}</p>
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+
+{% if closed %}
+<h2>{{ t('bills.closed') }}</h2>
+<div class="table-wrap"><table>
+  {% for b in closed %}<tr><td>{{ b.due_date }}</td><td><a href="{{ url_for('bill_detail', profile=g.profile, bill_id=b.id) }}">{{ b.payee }}</a></td>
+    <td class="num">{{ money(b.total_minor) }}</td><td>{{ badge(b.status, 'bill_status.') }}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+{% endblock %}

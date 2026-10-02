@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, stat with context %}
+{% block title %}{{ t('nav.assets') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.assets') }}</h1>
+<div class="grid">
+  {{ stat(t('report.total_assets'), money(bs.total_assets_minor)) }}
+  {{ stat(t('report.total_liabilities'), money(bs.total_liabilities_minor)) }}
+  {{ stat(t('report.net_worth'), money(bs.net_worth_minor)) }}
+</div>
+<p class="help">{{ t('asset.policy_' ~ g.profile) }}</p>
+
+<h2>{{ t('asset.register') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.name') }}</th><th>{{ t('asset.class') }}</th><th>{{ t('asset.purchase_date') }}</th><th class="num">{{ t('asset.purchase_value') }}</th>
+      {% if g.profile == 'business' %}<th class="num">{{ t('asset.accumulated_depreciation') }}</th>{% endif %}
+      <th class="num">{{ t('asset.carrying_value') }}</th><th class="num">{{ t('asset.estimated_value') }}</th><th></th></tr>
+  {% for a in rows %}
+  <tr><td>{{ nm(a) }}<div class="small muted">{% if a.depreciation_method != 'none' %}{{ t('depreciation.' ~ a.depreciation_method) }} · {{ a.useful_life_months }} {{ t('unit.months') }}{% endif %}</div></td>
+    <td>{{ t('asset_class.' ~ a.asset_class) }}</td><td>{{ a.purchase_date }}</td><td class="num">{{ money(a.purchase_value_minor) }}</td>
+    {% if g.profile == 'business' %}<td class="num">{{ money(a.accumulated_depreciation_minor) }}</td>{% endif %}
+    <td class="num">{{ money(a.carrying_value_minor) }}</td><td class="num">{{ money(a.current_value_minor) }}</td>
+    <td><details><summary class="small">{{ t('common.actions') }}</summary>
+      <form method="post" class="inline" data-nopersist>{{ csrf_input() }}<input type="hidden" name="action" value="revalue"><input type="hidden" name="asset_id" value="{{ a.id }}">
+        <input class="money" name="value" placeholder="{{ t('asset.estimated_value') }}" required><input type="date" name="date" value="{{ today }}">
+        <button class="ghost">{{ t('asset.revalue') }}</button></form>
+      <form method="post" class="inline" data-nopersist>{{ csrf_input() }}<input type="hidden" name="action" value="dispose"><input type="hidden" name="asset_id" value="{{ a.id }}">
+        <input class="money" name="proceeds" placeholder="{{ t('asset.sale_proceeds') }}"><input type="date" name="date" value="{{ today }}">
+        <select name="account_id">{% for v, txt in acct_opts(pay_accounts) %}<option value="{{ v }}">{{ txt }}</option>{% endfor %}</select>
+        <button class="danger">{{ t('asset.dispose') }}</button></form>
+    </details></td></tr>
+  {% else %}<tr><td colspan="8" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+{% if g.profile == 'business' %}
+<form method="post" class="inline" data-nopersist>{{ csrf_input() }}<input type="hidden" name="action" value="depreciate">
+  <button class="ghost">{{ t('asset.post_depreciation') }}</button></form>
+{% endif %}
+
+<details class="card">
+  <summary>{{ t('asset.new') }}</summary>
+  <form method="post" class="stack">
+    {{ csrf_input() }}<input type="hidden" name="action" value="create">
+    {{ select('asset_class', t('asset.class'), enum_opts(classes, 'asset_class.')) }}
+    {{ field('name_ar', t('field.name_ar'), required=true, extra='dir="rtl" lang="ar"') }}
+    {{ field('name_en', t('field.name_en'), required=true, extra='dir="ltr" lang="en"') }}
+    {{ money_in('purchase_value', t('asset.purchase_value')) }}
+    {{ date('purchase_date', t('asset.purchase_date')) }}
+    {{ select('funding', t('asset.funding'), enum_opts(['cash', 'opening', 'already_posted'], 'funding.'), placeholder=false) }}
+    <div data-show-when="funding=cash">{{ select('cash_account_id', t('field.payment_account'), acct_opts(pay_accounts)) }}</div>
+    {{ money_in('current_value', t('asset.estimated_value'), required=false) }}
+    {% if g.profile == 'business' %}
+      {{ select('depreciation_method', t('asset.depreciation_method'), enum_opts(['none', 'straight_line', 'declining_balance'], 'depreciation.'), placeholder=false) }}
+      {{ field('useful_life_months', t('asset.useful_life'), 'number') }}
+      {{ money_in('salvage', t('asset.salvage'), required=false) }}
+    {% endif %}
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+
+<h2>{{ t('liability.title') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.name') }}</th><th>{{ t('col.type') }}</th><th>{{ t('field.due_date') }}</th><th class="num">{{ t('col.balance') }}</th></tr>
+  {% for l in liabilities %}<tr><td>{{ nm(l.register) if l.register else nm(l.account) }}</td><td>{{ t('account_type.' ~ l.account.account_type) }}</td>
+    <td>{{ l.register.due_date if l.register and l.register.due_date else '' }}</td><td class="num">{{ money(l.balance_minor) }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+<details class="card">
+  <summary>{{ t('liability.new') }}</summary>
+  <p class="help">{{ t('liability.help') }}</p>
+  <form method="post" class="stack">
+    {{ csrf_input() }}<input type="hidden" name="action" value="liability">
+    {{ select('liability_class', t('col.type'), enum_opts(liability_classes, 'liability_class.')) }}
+    {{ select('account_id', t('nav.accounts'), acct_opts(liab_accounts)) }}
+    {{ field('name_ar', t('field.name_ar'), required=true, extra='dir="rtl"') }}
+    {{ field('name_en', t('field.name_en'), required=true, extra='dir="ltr"') }}
+    {{ date('due_date', t('field.due_date'), required=false) }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+{% endblock %}

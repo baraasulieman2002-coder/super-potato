@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, date, select, check with context %}
+{% block title %}{{ t('nav.budgets') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.budgets') }}</h1>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.name') }}</th><th>{{ t('budget.period_type') }}</th><th>{{ t('field.from') }}</th><th>{{ t('field.to') }}</th><th>{{ t('budget.rollover') }}</th></tr>
+  {% for b in rows %}<tr><td><a href="{{ url_for('budget_detail', profile=g.profile, budget_id=b.id) }}">{{ b.name }}</a></td>
+    <td>{{ t('budget_period.' ~ b.period_type) }}</td><td>{{ b.start_date }}</td><td>{{ b.end_date }}</td><td>{{ '✓' if b.rollover else '' }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<div class="card">
+  <h2>{{ t('budget.new') }}</h2>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ field('name', t('col.name'), required=true) }}
+    {{ select('period_type', t('budget.period_type'), enum_opts(['monthly', 'annual'], 'budget_period.'), placeholder=false) }}
+    {{ date('start_date', t('field.from')) }}
+    {{ check('rollover', t('budget.rollover_help')) }}
+    <div class="wide table-wrap"><table>
+      <tr><th>{{ t('budget.line_type') }}</th><th>{{ t('col.category') }}</th><th>{{ t('budget.area') }}</th><th>{{ t('col.amount') }}</th></tr>
+      {% for i in range(8) %}
+      <tr>
+        <td><select name="line_type">{% for lt in line_types %}<option value="{{ lt }}">{{ t('line_type.' ~ lt) }}</option>{% endfor %}</select></td>
+        <td><select name="line_category"><option value="">—</option>
+          <optgroup label="{{ t('line_type.expense') }}">{% for c in exp_cats %}<option value="{{ c.id }}">{{ nm(c) }}</option>{% endfor %}</optgroup>
+          <optgroup label="{{ t('line_type.income') }}">{% for c in inc_cats %}<option value="{{ c.id }}">{{ nm(c) }}</option>{% endfor %}</optgroup>
+        </select></td>
+        <td><input name="line_area"></td>
+        <td><input class="money" name="line_amount" placeholder="0.000"></td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    <p class="help wide">{{ t('budget.line_help') }}</p>
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</div>
+{% endblock %}

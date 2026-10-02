@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, money as money_in, date, select, badge, stat, meter with context %}
+{% set l = s.loan %}
+{% block title %}{{ t('loan.statement') }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ t('loan.statement') }}: {{ l.borrower }} ← {{ l.lender }}</h1><span class="spacer"></span>
+  <button class="ghost no-print" onclick="window.print()">{{ t('common.print') }}</button></div>
+<p>{{ badge(l.status, 'loan_status.') }} {{ t('loan_type.' ~ l.loan_type) }} · {{ t('loan_role.' ~ l.role) }} ·
+   {{ t('interest_method.' ~ l.interest_method) }} {{ l.annual_rate }}% · {{ t('frequency.' ~ l.frequency) }} × {{ l.term_count }}</p>
+<div class="grid">
+  {{ stat(t('loan.principal'), money(l.principal_minor)) }}
+  {{ stat(t('loan.outstanding'), money(l.outstanding_principal_minor)) }}
+  {{ stat(t('loan.paid_principal'), money(l.paid_principal_minor)) }}
+  {{ stat(t('loan.paid_interest'), money(l.paid_interest_minor)) }}
+  {{ stat(t('loan.remaining_interest'), money(l.remaining_interest_minor)) }}
+  {{ stat(t('loan.total_interest'), money(l.total_projected_interest_minor)) }}
+  {{ stat(t('loan.missed_label'), l.missed_count, 'neg' if l.missed_count else '') }}
+  {{ stat(t('loan.maturity'), l.maturity_date) }}
+</div>
+{{ meter(l.progress_pct) }}
+
+{% if l.outstanding_principal_minor %}
+<div class="card no-print">
+  <h2>{{ t('loan.record_payment') }}</h2>
+  <form method="post" class="stack">
+    {{ csrf_input() }}<input type="hidden" name="action" value="pay">
+    {{ money_in('amount', t('col.amount'), value=plain(l.next_installment.principal_minor + l.next_installment.interest_minor - l.next_installment.paid_principal_minor - l.next_installment.paid_interest_minor) if l.next_installment else none) }}
+    {{ date('date', t('col.date')) }}
+    {% if b_accounts %}
+      {{ select('business_account_id', '🏪 ' ~ t('transfer.business_account'), acct_opts(b_accounts)) }}
+      {{ select('personal_account_id', '👤 ' ~ t('transfer.personal_account'), acct_opts(p_accounts)) }}
+    {% else %}
+      {{ select('account_id', t('loan.cash_account'), acct_opts(pay_accounts), selected=l.cash_account_id) }}
+    {% endif %}
+    <p class="help wide">{{ t('loan.allocation_rule') }}</p>
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</div>
+
+{% if l.interest_method == 'reducing_balance' %}
+<div class="card no-print">
+  <h2>{{ t('loan.what_if') }}</h2>
+  <form method="get" class="inline" data-nopersist>
+    <label>{{ t('loan.extra_per_period') }} <input class="money" name="extra" value="{{ request.args.get('extra', '50') }}"></label>
+    <button class="ghost" type="submit">{{ t('loan.calculate') }}</button>
+  </form>
+  {% if whatif %}
+  <div class="table-wrap"><table>
+    <tr><th></th><th class="num">{{ t('loan.now') }}</th><th class="num">{{ t('loan.with_extra') }}</th><th class="num">{{ t('loan.difference') }}</th></tr>
+    <tr><td>{{ t('loan.payments_left') }}</td><td class="num">{{ whatif.base_periods }}</td><td class="num">{{ whatif.new_periods }}</td><td class="num">{{ whatif.periods_saved }}</td></tr>
+    <tr><td>{{ t('loan.total_interest') }}</td><td class="num">{{ money(whatif.base_interest_minor) }}</td><td class="num">{{ money(whatif.new_interest_minor) }}</td><td class="num pos">{{ money(whatif.interest_saved_minor) }}</td></tr>
+  </table></div>
+  <p class="help">{{ t('loan.what_if_note') }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if quote and l.loan_type not in ('owner_loan_to_business', 'business_loan_to_owner') %}
+<div class="card no-print">
+  <h2>{{ t('loan.early_settlement') }}</h2>
+  <p>{{ t('loan.quote', principal=money(quote.principal_minor), interest=money(quote.accrued_interest_minor + quote.unpaid_interest_due_minor), fee=money(quote.fee_minor), total=money(quote.total_minor), days=quote.days_accrued) }}</p>
+  <form method="post" class="inline">
+    {{ csrf_input() }}<input type="hidden" name="action" value="settle">
+    <input type="date" name="date" value="{{ today }}">
+    <select name="account_id">{% for v, txt in acct_opts(pay_accounts) %}<option value="{{ v }}" {% if v == l.cash_account_id %}selected{% endif %}>{{ txt }}</option>{% endfor %}</select>
+    <button class="danger" type="submit">{{ t('loan.settle_now') }}</button>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+<h2>{{ t('loan.schedule') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>#</th><th>{{ t('field.due_date') }}</th><th class="num">{{ t('loan.principal_part') }}</th><th class="num">{{ t('loan.interest_part') }}</th>
+      <th class="num">{{ t('loan.paid') }}</th><th>{{ t('col.status') }}</th></tr>
+  {% for i in s.installments %}
+  <tr class="{{ 'muted' if i.status in ('paid','waived') }}">
+    <td>{{ i.seq }}</td><td>{{ i.due_date }}</td><td class="num">{{ money(i.principal_minor) }}</td><td class="num">{{ money(i.interest_minor) }}</td>
+    <td class="num">{{ money(i.paid_principal_minor + i.paid_interest_minor) }}</td>
+    <td>{% if i.status not in ('paid','waived') and i.due_date < today %}{{ badge('overdue', 'bill_status.') }}{% else %}{{ badge(i.status, 'installment_status.') }}{% endif %}</td>
+  </tr>{% endfor %}
+</table></div>
+
+<h2>{{ t('loan.payments') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('col.type') }}</th><th class="num">{{ t('loan.principal_part') }}</th><th class="num">{{ t('loan.interest_part') }}</th><th class="num">{{ t('loan.fees') }}</th></tr>
+  {% for p in s.payments %}<tr><td>{{ p.pay_date }}</td><td>{{ t('loan_payment_kind.' ~ p.kind) }}</td><td class="num">{{ money(p.principal_minor) }}</td><td class="num">{{ money(p.interest_minor) }}</td><td class="num">{{ money(p.fee_minor) }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<form method="post" class="inline no-print">
+  {{ csrf_input() }}<input type="hidden" name="action" value="status">
+  <select name="status">{% for st in ['active', 'restructured', 'defaulted'] %}<option value="{{ st }}">{{ t('loan_status.' ~ st) }}</option>{% endfor %}</select>
+  <button class="ghost" type="submit">{{ t('loan.set_status') }}</button>
+</form>
+<details><summary class="small">{{ t('loan.assumptions_title') }}</summary><p class="help">{{ t('loan.assumptions') }}</p></details>
+{% endblock %}

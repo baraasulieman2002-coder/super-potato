@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ dir }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ t('app.finance') }}{% endblock %} — {{ t('app.name') }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+{% set P = g.get('profile') %}
+<body class="p-{{ P or 'none' }}">
+<header class="topbar">
+  <a class="brand" href="{{ url_for('hub') }}">{{ t('app.name') }}</a>
+  <span class="muted small">{{ t('app.finance') }}</span>
+  <span class="spacer"></span>
+  <form method="post" action="{{ url_for('set_lang') }}" id="lang-form" data-nopersist>
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <input type="hidden" name="next" value="{{ request.full_path if request.method == 'GET' else request.path }}">
+    <input type="hidden" name="lang" value="{{ 'en' if lang == 'ar' else 'ar' }}">
+    <button class="ghost" type="submit" lang="{{ 'en' if lang == 'ar' else 'ar' }}">{{ t('lang.switch') }}</button>
+  </form>
+  {% if user %}
+  <span class="small">{{ user.display_name }} · {{ t('role.' ~ user.role) }}</span>
+  <form method="post" action="{{ url_for('logout') }}" data-nopersist>
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <button class="ghost" type="submit">{{ t('auth.logout') }}</button>
+  </form>
+  {% endif %}
+</header>
+<div class="shell">
+  {% if user %}
+  {% set NP = P if P in ('business', 'personal') else ('business' if 'business' in kinds else ('personal' if 'personal' in kinds else None)) %}
+  <nav class="side" aria-label="{{ t('nav.finance') }}">
+    <h4>{{ t('nav.finance') }}</h4>
+    <div class="switcher">
+      {% if 'business' in kinds %}<a class="biz {{ 'active' if P == 'business' }}" href="{{ url_for('dashboard', profile='business') }}">🏪 {{ t('nav.business_finance') }}</a>{% endif %}
+      {% if 'personal' in kinds %}<a class="per {{ 'active' if P == 'personal' }}" href="{{ url_for('dashboard', profile='personal') }}">👤 {{ t('nav.personal_finance') }}</a>{% endif %}
+      {% if can_combined %}<a class="cmb {{ 'active' if P == 'combined' }}" href="{{ url_for('overview') }}">⚖️ {{ t('nav.combined') }}</a>{% endif %}
+    </div>
+    {% if NP %}
+    <h4>{{ t('profile.' ~ NP ~ '.short') }}</h4>
+    {% set ep = request.endpoint %}
+    {% for endpoint, key in [('advisor_view','nav.advisor'), ('accounts_view','nav.accounts'), ('income','nav.income'), ('expenses','nav.expenses'), ('bills_view','nav.bills'), ('recurring_view','nav.recurring'), ('loans_view','nav.loans'), ('debts_view','nav.debts'), ('assets_view','nav.assets'), ('budgets_view','nav.budgets'), ('goals_view','nav.goals'), ('forecast_view','nav.forecast'), ('reports_index','nav.reports'), ('reconciliation','nav.reconciliation')] %}
+      {% if endpoint == 'advisor_view' %}
+        <a class="{{ 'active' if ep == endpoint }}" href="{{ url_for(endpoint, scope=NP) }}">{{ t(key) }}</a>
+      {% else %}
+        <a class="{{ 'active' if ep == endpoint }}" href="{{ url_for(endpoint, profile=NP) }}">{{ t(key) }}</a>
+      {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% if can_combined %}
+    <h4>{{ t('nav.owner') }}</h4>
+    <a class="{{ 'active' if request.endpoint == 'owner_transfers' }}" href="{{ url_for('owner_transfers') }}">{{ t('nav.transfers') }}</a>
+    <a class="{{ 'active' if request.endpoint == 'forecast_combined' }}" href="{{ url_for('forecast_combined') }}">{{ t('nav.forecast_combined') }}</a>
+    {% endif %}
+    {% if is_owner or user.role == 'accountant' %}
+    <h4>{{ t('nav.settings') }}</h4>
+    {% if is_owner %}<a class="{{ 'active' if request.endpoint == 'access_settings' }}" href="{{ url_for('access_settings') }}">{{ t('nav.access') }}</a>{% endif %}
+    <a class="{{ 'active' if request.endpoint == 'backup_view' }}" href="{{ url_for('backup_view') }}">{{ t('nav.backup') }}</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+  <main>
+    {% if P in ('business', 'personal', 'combined') %}
+    <div class="banner {{ P }}" role="status">
+      <span class="label">{{ {'business': '🏪', 'personal': '👤', 'combined': '⚖️'}[P] }} {{ t('profile.' ~ P ~ '.banner') }}</span>
+      <span class="hint">{{ t('profile.' ~ P ~ '.hint') }}</span>
+      {% if P == 'personal' %}<span class="badge">🔒 {{ t('profile.personal.private') }}</span>{% endif %}
+    </div>
+    <div class="print-only"><strong>{{ t('app.name') }}</strong> — {{ t('profile.' ~ P ~ '.banner') }} — {{ today }}</div>
+    {% endif %}
+    {% for cat, msg in get_flashed_messages(with_categories=true) %}
+      <div class="flash {{ cat }}" role="alert">{{ msg }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script>
+/* Keep unsaved form input when switching language: values are stashed in
+   sessionStorage for this page, then restored after reload.  Passwords and
+   security tokens are never stored. */
+(function () {
+  var key = 'namareq:forms:' + location.pathname + location.search;
+  var langForm = document.getElementById('lang-form');
+  function persistable() { return Array.prototype.filter.call(document.forms, function (f) { return !f.hasAttribute('data-nopersist'); }); }
+  if (langForm) langForm.addEventListener('submit', function () {
+    var data = {};
+    persistable().forEach(function (form, fi) {
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el.name || el.type === 'password' || el.type === 'hidden' || el.type === 'submit' || el.type === 'file') return;
+        var v = (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value;
+        data[fi + ':' + el.name + ':' + (el.type === 'radio' ? el.value : '')] = v;
+      });
+    });
+    try { sessionStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+  });
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (saved) {
+      sessionStorage.removeItem(key);
+      persistable().forEach(function (form, fi) {
+        Array.prototype.forEach.call(form.elements, function (el) {
+          var k = fi + ':' + el.name + ':' + (el.type === 'radio' ? el.value : '');
+          if (!(k in saved)) return;
+          if (el.type === 'checkbox' || el.type === 'radio') el.checked = saved[k]; else el.value = saved[k];
+          el.dispatchEvent(new Event('change'));
+        });
+      });
+    }
+  } catch (e) {}
+  /* Show only the fields relevant to the chosen option (data-show-when). */
+  function sync() {
+    document.querySelectorAll('[data-show-when]').forEach(function (el) {
+      var parts = el.getAttribute('data-show-when').split('=');
+      var src = document.querySelector('[name="' + parts[0] + '"]');
+      if (!src) return;
+      var ok = parts[1].split('|').indexOf(src.value) !== -1;
+      el.hidden = !ok;
+      el.querySelectorAll('input,select,textarea').forEach(function (i) { i.disabled = !ok; });
+    });
+  }
+  document.addEventListener('change', sync);
+  sync();
+})();
+</script>
+</body>
+</html>

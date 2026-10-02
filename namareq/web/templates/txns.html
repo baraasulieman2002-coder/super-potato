@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, check, badge with context %}
+{% set is_inc = kind == 'income' %}
+{% block title %}{{ t('nav.income' if is_inc else 'nav.expenses') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.income' if is_inc else 'nav.expenses') }}</h1>
+
+<details class="card" {% if request.method == 'POST' or not rows %}open{% endif %}>
+  <summary>{{ t('income.new' if is_inc else 'expense.new') }}</summary>
+  {% if is_inc and g.profile == 'business' %}<p class="help">{{ t('income.sales_auto_note') }}</p>{% endif %}
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    {{ date('date', t('col.date')) }}
+    {{ select('category_id', t('col.category'), opts(categories)) }}
+    {% if not is_inc %}{{ field('subcategory', t('field.subcategory')) }}{% endif %}
+    {{ money_in('amount', t('field.amount_net') if g.profile == 'business' else (t('field.amount_gross') if is_inc else t('col.amount'))) }}
+    {{ money_in('tax', t('field.tax_collected') if (is_inc and g.profile == 'business') else (t('field.tax_withheld') if is_inc else t('field.tax')), required=false) }}
+    {{ select('account_id', t('field.payment_account'), acct_opts(pay_accounts)) }}
+    {% if is_inc %}
+      {{ field('source', t('field.source')) }}
+    {% else %}
+      {{ field('payee', t('field.payee')) }}
+      {{ date('due_date', t('field.due_date'), required=false) }}
+      {{ check('unpaid', t('expense.unpaid')) }}
+      {% if g.profile == 'business' %}
+        {{ check('tax_recoverable', t('expense.tax_recoverable')) }}
+        {{ field('business_purpose', t('field.business_purpose'), cls='wide') }}
+      {% endif %}
+    {% endif %}
+    {{ field('reference', t('field.reference')) }}
+    {{ check('is_recurring', t('field.is_recurring')) }}
+    {{ field('notes', t('field.notes'), cls='wide') }}
+    {% if dup %}
+      <div class="wide flash warning">{{ t('expense.possible_duplicate', date=dup.txn_date) }}
+        {{ check('confirm_duplicate', t('expense.confirm_duplicate')) }}</div>
+    {% endif %}
+    {% if not is_inc and g.profile == 'personal' %}<p class="help wide">{{ t('expense.personal_not_deductible') }}</p>{% endif %}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+
+<form method="get" class="toolbar" data-nopersist>
+  <label>{{ t('field.from') }} <input type="date" name="start" value="{{ start }}"></label>
+  <label>{{ t('field.to') }} <input type="date" name="end" value="{{ end }}"></label>
+  <button class="ghost" type="submit">{{ t('common.filter') }}</button>
+</form>
+
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('col.category') }}</th><th>{{ t('field.source' if is_inc else 'field.payee') }}</th>
+      <th>{{ t('field.payment_account') }}</th><th class="num">{{ t('col.amount') }}</th><th class="num">{{ t('field.tax') }}</th>
+      <th>{{ t('col.status') }}</th><th></th></tr>
+  {% for r in rows %}
+  <tr class="{{ 'muted' if r.status == 'reversed' }}">
+    <td>{{ r.txn_date }}</td>
+    <td>{{ r.cat_ar if lang == 'ar' else r.cat_en }}{% if r.subcategory %} / {{ r.subcategory }}{% endif %}
+        {% if r.source_type %}<span class="badge">{{ t('income.auto') }}</span>{% endif %}</td>
+    <td>{{ (r.source_name if is_inc else r.payee) or '' }}</td>
+    <td>{{ r.acct_ar if lang == 'ar' else r.acct_en }}</td>
+    <td class="num">{{ money(r.amount_minor, r.currency) }}</td>
+    <td class="num">{{ money(r.tax_minor, r.currency) if r.tax_minor else '' }}</td>
+    <td>{{ badge(r.status, 'txn_status.') }}
+        {% if not is_inc %}{% if r.paid_status == 'unpaid' %}{{ badge('pending', 'paid_status.') }}{% endif %}
+        {% if r.approval_status not in ('not_required',) %}{{ badge(r.approval_status, 'approval.') }}{% endif %}{% endif %}</td>
+    <td>
+      {% if r.status == 'posted' and not r.source_type %}
+      <details><summary class="small">{{ t('common.actions') }}</summary>
+        {% if not is_inc and r.paid_status == 'unpaid' %}
+        <form method="post" action="{{ url_for('pay_expense', profile=g.profile, txn_id=r.id) }}" class="inline" data-nopersist>
+          {{ csrf_input() }}<input type="date" name="date" value="{{ today }}">
+          <select name="account_id" required>{% for v, txt in acct_opts(pay_accounts) %}<option value="{{ v }}">{{ txt }}</option>{% endfor %}</select>
+          <button type="submit">{{ t('common.mark_paid') }}</button></form>
+        {% endif %}
+        {% if not is_inc and r.approval_status == 'pending' and is_owner %}
+        <form method="post" action="{{ url_for('approve_expense', txn_id=r.id) }}" class="inline" data-nopersist>
+          {{ csrf_input() }}<button name="decision" value="approve">{{ t('approval.approve') }}</button>
+          <button class="ghost" name="decision" value="reject">{{ t('approval.reject') }}</button></form>
+        {% endif %}
+        <form method="post" action="{{ url_for('reverse_txn', profile=g.profile, kind=kind, txn_id=r.id) }}" class="inline" data-nopersist>
+          {{ csrf_input() }}<input type="date" name="date" value="{{ today }}">
+          <input name="reason" required placeholder="{{ t('field.reason') }}">
+          <button class="danger" type="submit">{{ t('common.reverse') }}</button></form>
+        <p class="small muted">{{ t('ledger.reversal_note') }}</p>
+      </details>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="muted">{{ t('common.none') }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

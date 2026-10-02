@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stat with context %}
+{% block title %}{{ t('nav.forecast') }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ t('nav.forecast') }}</h1><span class="badge estimate">{{ t('forecast.estimate') }}</span><span class="spacer"></span>
+  {% for h in horizons %}<a class="btn {{ '' if fc.horizon_days == h else 'ghost' }}" href="?h={{ h }}">{{ t('forecast.h' ~ h) }}</a>{% endfor %}</div>
+<p class="help">{{ t('forecast.disclaimer') }}</p>
+<div class="grid">
+  {{ stat(t('forecast.opening'), money(fc.opening_minor)) }}
+  {{ stat(t('forecast.inflows'), money(fc.total_inflow_minor)) }}
+  {{ stat(t('forecast.outflows'), money(fc.total_outflow_minor)) }}
+  {{ stat(t('forecast.closing'), money(fc.closing_minor), 'neg' if fc.closing_minor < 0 else '') }}
+  <div class="stat"><span class="k">{{ t('forecast.lowest_label') }}</span><span class="v {{ 'neg' if fc.lowest_balance_minor < 0 }}">{{ money(fc.lowest_balance_minor) }}</span><span class="small muted">{{ fc.lowest_balance_date }}</span></div>
+</div>
+{% if fc.first_shortage_date %}<p class="flash error">{{ t('forecast.shortage', days=fc.days_until_shortage, date=fc.first_shortage_date) }}</p>{% endif %}
+{{ svg|safe }}
+
+<h2>{{ t('forecast.assumptions') }}</h2>
+{% set b = fc.assumptions.baseline %}
+<ul class="small">
+  <li>{{ t('forecast.assume_start') }}</li>
+  <li>{{ t('forecast.assume_baseline', days=b.days, start=b.window[0], end=b.window[1], income=money(b.daily_income_minor), spend=money(b.daily_expense_minor)) }}
+    {% if not fc.assumptions.include_baseline %}<strong>({{ t('forecast.baseline_off') }})</strong>{% endif %}</li>
+  {% if b.recent_income_trend_pct is not none %}<li>{{ t('forecast.assume_trend', pct=b.recent_income_trend_pct) }}</li>{% endif %}
+  <li>{{ t('forecast.assume_events') }}</li>
+  <li>{{ t('forecast.assume_excluded', recv=money(fc.assumptions.excluded.overdue_receivables_minor), lent=money(fc.assumptions.excluded.overdue_lent_installments_minor)) }}</li>
+  {% if g.profile == 'business' %}<li>{{ t('forecast.assume_tax') }}</li>{% endif %}
+</ul>
+<p><a class="btn ghost" href="?h={{ fc.horizon_days }}&baseline={{ '0' if fc.assumptions.include_baseline else '1' }}">{{ t('forecast.toggle_baseline') }}</a></p>
+
+<h2>{{ t('forecast.by_week') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('field.from') }}</th><th>{{ t('field.to') }}</th><th class="num">{{ t('forecast.inflows') }}</th><th class="num">{{ t('forecast.outflows') }}</th><th class="num">{{ t('forecast.low') }}</th><th class="num">{{ t('forecast.closing') }}</th></tr>
+  {% for w in weeks %}<tr><td>{{ w.start }}</td><td>{{ w.end }}</td><td class="num">{{ money(w.inflow_minor) }}</td><td class="num">{{ money(w.outflow_minor) }}</td>
+    <td class="num {{ 'neg' if w.low_minor < 0 }}">{{ money(w.low_minor) }}</td><td class="num {{ 'neg' if w.balance_minor < 0 }}">{{ money(w.balance_minor) }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>{{ t('forecast.events') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('col.type') }}</th><th>{{ t('col.description') }}</th><th class="num">{{ t('col.amount') }}</th></tr>
+  {% for e in fc.events %}<tr><td>{{ e.date }}{% if e.overdue %} <span class="badge overdue">{{ t('bill_status.overdue') }}</span>{% endif %}</td>
+    <td>{{ t('forecast_event.' ~ e.kind) }}{% if e.projected %} <span class="badge estimate">{{ t('forecast.projected') }}</span>{% endif %}</td>
+    <td>{{ t('forecast_event.sales_tax') if e.label == 'sales_tax' else e.label }}</td>
+    <td class="num {{ 'neg' if e.amount_minor < 0 else 'pos' }}">{{ money(e.amount_minor) }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

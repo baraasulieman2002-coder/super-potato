@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import badge, stat with context %}
+{% block title %}{{ bill.payee }}{% endblock %}
+{% block content %}
+<h1>{{ bill.payee }} {{ badge(bill.status, 'bill_status.') }}</h1>
+<div class="grid">
+  {{ stat(t('col.total'), money(bill.total_minor)) }}
+  {{ stat(t('bills.paid'), money(bill.paid_minor)) }}
+  {{ stat(t('bills.remaining'), money(bill.remaining_minor)) }}
+  {{ stat(t('field.due_date'), bill.due_date) }}
+</div>
+<p class="muted">{{ t('field.frequency') }}: {{ t('frequency.' ~ bill.frequency) }} · {{ t('col.category') }}: {{ bill.cat_ar if lang == 'ar' else bill.cat_en }}
+  {% if bill.period_start %} · {{ t('field.billing_period') }}: {{ bill.period_start }} → {{ bill.period_end }}{% endif %}</p>
+<h2>{{ t('bills.history') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th class="num">{{ t('col.amount') }}</th><th>{{ t('col.status') }}</th></tr>
+  {% for p in history %}<tr><td>{{ p.pay_date }}</td><td class="num">{{ money(p.amount_minor) }}</td><td>{{ badge(p.expense_status, 'txn_status.') }}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+<a class="btn ghost" href="{{ url_for('bills_view', profile=g.profile) }}">{{ t('common.back') }}</a>
+{% endblock %}

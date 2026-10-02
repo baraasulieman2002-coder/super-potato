@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, money as money_in, date, select, check, stat, badge with context %}
+{% block title %}{{ t('nav.transfers') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.transfers') }}</h1>
+<p class="help">{{ t('transfer.intro') }}</p>
+<div class="grid">
+  {{ stat(t('transfer.business_owes_owner'), money(balances.business_owes_owner_minor)) }}
+  {{ stat(t('transfer.owner_owes_business'), money(balances.owner_owes_business_minor)) }}
+  {{ stat(t('transfer.profit_available'), money(profit_available)) }}
+</div>
+
+{% set not_bpp = types|reject('equalto', 'business_paid_from_personal')|join('|') %}
+{% set not_ppb = types|reject('equalto', 'personal_paid_from_business')|join('|') %}
+<div class="card">
+  <h2>{{ t('transfer.new') }}</h2>
+  <form method="post" class="stack">
+    {{ csrf_input() }}
+    <label class="wide">{{ t('transfer.type') }} *
+      <select name="transfer_type" required>
+        <option value="">{{ t('transfer.choose_type') }}</option>
+        {% for ty in types %}<option value="{{ ty }}" {% if request.form.get('transfer_type') == ty %}selected{% endif %}>{{ t('transfer_type.' ~ ty) }}</option>{% endfor %}
+      </select>
+    </label>
+    {% for ty in types %}
+      <p class="help wide" data-show-when="transfer_type={{ ty }}">📘 {{ t('transfer_help.' ~ ty) }}</p>
+    {% endfor %}
+    {{ date('date', t('col.date')) }}
+    {{ money_in('amount', t('col.amount')) }}
+    <div data-show-when="transfer_type={{ not_bpp }}">{{ select('business_account_id', '🏪 ' ~ t('transfer.business_account'), acct_opts(b_accounts)) }}</div>
+    <div data-show-when="transfer_type={{ not_ppb }}">{{ select('personal_account_id', '👤 ' ~ t('transfer.personal_account'), acct_opts(p_accounts)) }}</div>
+    <div data-show-when="transfer_type=business_loan_repayment_to_owner|owner_loan_repayment_to_business">{{ money_in('interest', t('transfer.interest_part'), required=false) }}</div>
+    <div data-show-when="transfer_type=business_paid_from_personal" class="wide">
+      <div class="stack">
+        {{ select('business_expense_category_id', '🏪 ' ~ t('transfer.business_expense_category'), opts(b_cats), required=false) }}
+        {{ select('business_target_account_id', '🏪 ' ~ t('transfer.business_target_account'), acct_opts(b_targets), required=false) }}
+        {{ select('settle_as_bpp', t('transfer.settle_as'), [('due_to_owner', t('settle.due_to_owner')), ('capital_contribution', t('settle.capital_contribution'))], placeholder=false) }}
+        {{ field('payee', t('field.payee')) }}
+      </div>
+    </div>
+    <div data-show-when="transfer_type=personal_paid_from_business" class="wide">
+      <div class="stack">
+        {{ select('personal_expense_category_id', '👤 ' ~ t('transfer.personal_expense_category'), opts(p_cats)) }}
+        {{ select('settle_as_ppb', t('transfer.settle_as'), [('withdrawal', t('settle.withdrawal')), ('due_from_owner', t('settle.due_from_owner'))], placeholder=false) }}
+      </div>
+    </div>
+    <div data-show-when="transfer_type=profit_distribution">{{ check('allow_exceeding_profit', t('transfer.allow_exceeding_profit')) }}</div>
+    {{ field('description', t('col.description'), required=true, cls='wide') }}
+    {{ field('reference', t('field.reference')) }}
+    <button type="submit">{{ t('transfer.post_both') }}</button>
+  </form>
+</div>
+
+<details class="card">
+  <summary>{{ t('loan.owner_loan_new') }}</summary>
+  <form method="post" action="{{ url_for('owner_loan') }}" class="stack">
+    {{ csrf_input() }}
+    {{ select('direction', t('loan.direction'), [('owner_to_business', t('transfer_type.owner_loan_to_business')), ('business_to_owner', t('transfer_type.business_loan_to_owner'))]) }}
+    {{ money_in('principal', t('loan.principal')) }}
+    {{ field('annual_rate', t('loan.annual_rate'), value='0', extra='inputmode="decimal"') }}
+    {{ select('interest_method', t('loan.method'), enum_opts(['none', 'reducing_balance', 'flat'], 'interest_method.'), placeholder=false) }}
+    {{ select('frequency', t('field.frequency'), enum_opts(['monthly', 'weekly', 'quarterly', 'semi_annually', 'annually'], 'frequency.'), placeholder=false) }}
+    {{ field('term_count', t('loan.term_count'), 'number', required=true, extra='min="1"') }}
+    {{ date('start_date', t('loan.start_date')) }}
+    {{ date('first_payment_date', t('loan.first_payment_date')) }}
+    {{ select('business_account_id', '🏪 ' ~ t('transfer.business_account'), acct_opts(b_accounts)) }}
+    {{ select('personal_account_id', '👤 ' ~ t('transfer.personal_account'), acct_opts(p_accounts)) }}
+    <button type="submit">{{ t('common.save') }}</button>
+  </form>
+</details>
+
+<h2>{{ t('transfer.history') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('transfer.type') }}</th><th>{{ t('col.description') }}</th><th class="num">{{ t('col.amount') }}</th><th>{{ t('col.status') }}</th><th></th></tr>
+  {% for r in rows %}
+  <tr class="{{ 'muted' if r.status == 'reversed' }}">
+    <td>{{ r.txn_date }}</td><td>{{ t('transfer_type.' ~ r.transfer_type) }}</td><td>{{ r.description }}</td>
+    <td class="num">{{ money(r.amount_minor, r.currency) }}</td><td>{{ badge(r.status, 'txn_status.') }}</td>
+    <td>{% if r.status == 'posted' %}
+      <details><summary class="small">{{ t('common.reverse') }}</summary>
+      <form method="post" action="{{ url_for('reverse_owner_transfer', tid=r.id) }}" class="inline" data-nopersist>
+        {{ csrf_input() }}<input type="date" name="date" value="{{ today }}"><input name="reason" required placeholder="{{ t('field.reason') }}">
+        <button class="danger" type="submit">{{ t('common.reverse') }}</button></form></details>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

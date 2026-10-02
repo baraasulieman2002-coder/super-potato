@@ -1,0 +1,44 @@
+{% macro csrf_input() %}<input type="hidden" name="_csrf" value="{{ csrf }}">{% endmacro %}
+
+{% macro field(name, label, type='text', required=false, value=none, cls='', extra='') -%}
+<label class="{{ cls }}">{{ label }}{% if required %} *{% endif %}
+  <input name="{{ name }}" type="{{ type }}" {% if required %}required{% endif %}
+         value="{{ request.form.get(name, value if value is not none else '') }}" {{ extra|safe }}>
+</label>
+{%- endmacro %}
+
+{% macro money(name, label, required=true, value=none) -%}
+<label>{{ label }}{% if required %} *{% endif %}
+  <input class="money" name="{{ name }}" inputmode="decimal" {% if required %}required{% endif %}
+         placeholder="0.000" value="{{ request.form.get(name, value if value is not none else '') }}">
+</label>
+{%- endmacro %}
+
+{% macro date(name, label, required=true, value=none) -%}
+{{ field(name, label, 'date', required, value if value is not none else (today if required else '')) }}
+{%- endmacro %}
+
+{% macro select(name, label, options, required=true, placeholder=true, selected=none) -%}
+{# options: list of (value, text) #}
+{% set cur = request.form.get(name, selected|string if selected is not none else '') %}
+<label>{{ label }}{% if required %} *{% endif %}
+  <select name="{{ name }}" {% if required %}required{% endif %}>
+    {% if placeholder %}<option value="">{{ t('common.choose') }}</option>{% endif %}
+    {% for v, text in options %}<option value="{{ v }}" {% if cur == v|string %}selected{% endif %}>{{ text }}</option>{% endfor %}
+  </select>
+</label>
+{%- endmacro %}
+
+{% macro check(name, label, checked=false) -%}
+<label class="check"><input type="checkbox" name="{{ name }}" value="1" {% if request.form.get(name) or checked %}checked{% endif %}> {{ label }}</label>
+{%- endmacro %}
+
+{% macro badge(status, prefix='status.') -%}<span class="badge {{ status }}">{{ t(prefix ~ status) }}</span>{%- endmacro %}
+
+{% macro meter(pct, over=false) -%}
+<div class="meter {{ 'over' if over }}"><span style="width: {{ [[pct or 0, 0]|max, 100]|min }}%"></span></div>
+{%- endmacro %}
+
+{% macro stat(key, value, cls='') -%}
+<div class="stat"><span class="k">{{ key }}</span><span class="v {{ cls }}">{{ value }}</span></div>
+{%- endmacro %}

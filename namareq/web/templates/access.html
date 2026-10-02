@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, field, select, check with context %}
+{% block title %}{{ t('nav.access') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.access') }}</h1>
+<p class="help">{{ t('access.rules') }}</p>
+
+<h2>{{ t('access.users') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('auth.username') }}</th><th>{{ t('col.name') }}</th><th>{{ t('access.role') }}</th><th>{{ t('access.finance_access') }}</th></tr>
+  {% for u in users %}<tr><td>{{ u.username }}</td><td>{{ u.display_name }}</td><td>{{ t('role.' ~ u.role) }}</td>
+    <td class="small">{{ t('access.default_' ~ u.role) }}</td></tr>{% endfor %}
+</table></div>
+<details class="card"><summary>{{ t('access.new_user') }}</summary>
+  <form method="post" class="stack">{{ csrf_input() }}<input type="hidden" name="action" value="user">
+    {{ field('username', t('auth.username'), required=true) }}{{ field('display_name', t('col.name'), required=true) }}
+    <label>{{ t('auth.password') }} *<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    {{ select('role', t('access.role'), enum_opts(roles, 'role.')) }}
+    {{ select('lang', t('access.language'), [('ar', 'العربية'), ('en', 'English')], placeholder=false) }}
+    <button type="submit">{{ t('common.save') }}</button></form>
+</details>
+
+<div class="card">
+  <h2>{{ t('access.grant') }}</h2>
+  <form method="post" class="stack" data-nopersist>
+    {{ csrf_input() }}<input type="hidden" name="action" value="grant">
+    <label>{{ t('access.user') }} *
+      <select name="user_id" required><option value="">{{ t('common.choose') }}</option>
+        {% for u in users if u.role != 'owner' %}<option value="{{ u.id }}">{{ u.display_name }} — {{ t('role.' ~ u.role) }}</option>{% endfor %}
+      </select></label>
+    {{ select('profile_kind', t('access.profile'), [('business', t('profile.business.short')), ('personal', t('profile.personal.short'))]) }}
+    {{ field('note', t('field.notes')) }}
+    <label>{{ t('access.owner_password') }} *<input type="password" name="owner_password" required autocomplete="current-password"></label>
+    <div class="wide">{{ check('confirm', t('access.confirm_text')) }}</div>
+    <p class="help wide">{{ t('access.grant_help') }}</p>
+    <button class="danger" type="submit">{{ t('access.grant_button') }}</button>
+  </form>
+</div>
+
+<h2>{{ t('access.grants') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('access.user') }}</th><th>{{ t('access.profile') }}</th><th>{{ t('access.confirmed_at') }}</th><th>{{ t('col.status') }}</th><th></th></tr>
+  {% for gr in grants %}<tr><td>{{ gr.display_name }}</td><td>{{ t('profile.' ~ gr.profile_kind ~ '.short') }}</td><td>{{ gr.confirmed_at[:16] }}</td>
+    <td>{{ t('access.revoked') ~ ' ' ~ gr.revoked_at[:10] if gr.revoked_at else t('status.active') }}</td>
+    <td>{% if not gr.revoked_at %}<form method="post" class="inline" data-nopersist>{{ csrf_input() }}<input type="hidden" name="action" value="revoke"><input type="hidden" name="grant_id" value="{{ gr.id }}"><button class="ghost">{{ t('access.revoke') }}</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>🔒 {{ t('access.log') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('access.user') }}</th><th>{{ t('access.resource') }}</th><th>{{ t('access.action') }}</th><th>{{ t('access.result') }}</th></tr>
+  {% for l in log %}<tr><td>{{ l.at[:19]|replace('T', ' ') }}</td><td>{{ l.display_name or '—' }}</td><td dir="ltr">{{ l.resource }}</td><td>{{ l.action }}</td>
+    <td>{% if l.allowed %}<span class="badge paid">{{ t('access.allowed') }}</span>{% else %}<span class="badge critical">{{ t('access.denied') }}</span>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('nav.reports') }}{% endblock %}
+{% block content %}
+<h1>{{ t('nav.reports') }}</h1>
+<div class="grid">
+  {% for n in names %}
+  <a class="card" style="text-decoration:none" href="{{ url_for('report_view', profile=g.profile, name=n) }}">
+    <strong>{{ t('report.' ~ n) }}</strong>
+    <div class="small muted">{{ t('report_desc.' ~ n) }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

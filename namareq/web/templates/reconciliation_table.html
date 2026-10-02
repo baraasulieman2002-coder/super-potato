@@ -1,0 +1,9 @@
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('nav.accounts') }}</th><th>{{ t('col.type') }}</th><th class="num">{{ t('reconcile.statement_balance') }}</th>
+      <th class="num">{{ t('reconcile.ledger_balance') }}</th><th class="num">{{ t('reconcile.difference') }}</th><th>{{ t('col.status') }}</th></tr>
+  {% for x in (r.rows if r is defined and r.rows is defined else rows) %}
+  <tr><td>{{ x.statement_date }}</td><td>{{ nm(x) }}</td><td>{{ t('reconcile_kind.' ~ x.kind) }}</td><td class="num">{{ money(x.statement_balance_minor) }}</td>
+    <td class="num">{{ money(x.ledger_balance_minor) }}</td><td class="num {{ 'neg' if x.difference_minor }}">{{ money(x.difference_minor) }}</td>
+    <td><span class="badge {{ 'balanced' if x.status == 'balanced' else 'warning' }}">{{ t('reconcile_status.' ~ x.status) }}</span>{% if x.adjustment_entry_id %} <span class="badge">{{ t('reconcile.adjusted') }}</span>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="7" class="muted">{{ t('common.none') }}</td></tr>{% endfor %}
+</table></div>

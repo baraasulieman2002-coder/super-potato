@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stat, badge, csrf_input with context %}
+{% block title %}{{ t('profile.' ~ g.profile ~ '.banner') }}{% endblock %}
+{% block content %}
+<h1>{{ t('dashboard.title') }}</h1>
+<div class="grid">
+  {{ stat(t('metric.liquid_cash'), money(bs.liquid_minor)) }}
+  {{ stat(t('report.total_assets'), money(bs.total_assets_minor)) }}
+  {{ stat(t('report.total_liabilities'), money(bs.total_liabilities_minor)) }}
+  {{ stat(t('report.net_worth'), money(bs.net_worth_minor), 'neg' if bs.net_worth_minor < 0 else '') }}
+  {{ stat(t('dashboard.month_income'), money(stmt.total_income_minor)) }}
+  {{ stat(t('dashboard.month_expenses'), money(stmt.total_expenses_minor + stmt.total_cost_of_sales_minor)) }}
+  {{ stat(t('report.' ~ ('net_profit' if g.profile == 'business' else 'net_savings')), money(stmt.net_minor), 'neg' if stmt.net_minor < 0 else 'pos') }}
+</div>
+
+<h2>{{ t('nav.forecast') }} — 30 {{ t('unit.days') }} <span class="badge estimate">{{ t('forecast.estimate') }}</span></h2>
+<div class="card">
+  {% if fc.first_shortage_date %}
+    <p class="neg"><strong>{{ t('forecast.shortage', days=fc.days_until_shortage, date=fc.first_shortage_date) }}</strong></p>
+  {% else %}
+    <p>{{ t('forecast.no_shortage', days=30) }}</p>
+  {% endif %}
+  <p class="small muted">{{ t('forecast.lowest', amount=fc.lowest_balance_minor, date=fc.lowest_balance_date) }} ·
+     <a href="{{ url_for('forecast_view', profile=g.profile) }}">{{ t('common.details') }}</a></p>
+</div>
+
+{% if due %}
+<h2>{{ t('recurring.due_title') }}</h2>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('col.date') }}</th><th>{{ t('col.name') }}</th><th class="num">{{ t('col.amount') }}</th><th></th></tr>
+  {% for r in due %}
+  <tr><td>{{ r.next_date }}</td><td>{{ r.name }}</td><td class="num">{{ money(r.amount_minor) }}</td>
+      <td><a href="{{ url_for('recurring_view', profile=g.profile) }}">{{ t('recurring.review') }}</a></td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>{{ t('nav.bills') }}</h2>
+<div class="grid">
+  {{ stat(t('bills.overdue'), alerts.overdue|length, 'neg' if alerts.overdue else '') }}
+  {{ stat(t('bills.due_today'), alerts.due_today|length) }}
+  {{ stat(t('bills.upcoming'), alerts.upcoming|length) }}
+</div>
+{% for b in (alerts.overdue + alerts.due_today + alerts.upcoming)[:8] %}
+  <div class="small">{{ badge(b.status, 'bill_status.') }} {{ b.payee }} — <span class="num">{{ money(b.remaining_minor) }}</span> — {{ b.due_date }}</div>
+{% endfor %}
+{% if alerts.autopay_to_confirm %}<p class="help">{{ t('bills.autopay_confirm', count=alerts.autopay_to_confirm|length) }}</p>{% endif %}
+
+<h2>{{ t('nav.advisor') }}</h2>
+{% for a in advice %}
+  <div class="small">{{ badge(a.severity, 'severity.') }} {{ advice_text(a) }}</div>
+{% else %}
+  <p class="muted small">{{ t('advisor.none') }}</p>
+{% endfor %}
+<p><a href="{{ url_for('advisor_view', scope=g.profile) }}">{{ t('advisor.open') }}</a></p>
+{% endblock %}

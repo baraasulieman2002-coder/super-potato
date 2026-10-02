@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import csrf_input, meter with context %}
+{% block title %}{{ r.budget.name }}{% endblock %}
+{% block content %}
+<div class="toolbar"><h1>{{ r.budget.name }}</h1><span class="spacer"></span><button class="ghost no-print" onclick="window.print()">{{ t('common.print') }}</button></div>
+<p class="muted">{{ r.budget.start_date }} → {{ r.budget.end_date }} · {{ t('budget.elapsed', elapsed=r.elapsed_days, total=r.total_days) }} ·
+  {{ t('budget.prior') }}: {{ r.prior_period[0] }} → {{ r.prior_period[1] }}</p>
+<div class="table-wrap"><table>
+  <tr><th>{{ t('budget.line_type') }}</th><th>{{ t('col.category') }}</th><th class="num">{{ t('budget.budgeted') }}</th><th class="num">{{ t('budget.actual') }}</th>
+      <th class="num">{{ t('bills.remaining') }}</th><th>{{ t('budget.used') }}</th><th class="num">{{ t('budget.projected') }}</th><th class="num">{{ t('budget.prior') }}</th><th></th></tr>
+  {% for l in r.lines %}
+  <tr>
+    <td>{{ t('line_type.' ~ l.line_type) }}{% if l.area %}<div class="small muted">{{ l.area }}</div>{% endif %}</td>
+    <td>{{ (l.inc_ar or l.exp_ar) if lang == 'ar' else (l.inc_en or l.exp_en) }}{% if not (l.inc_en or l.exp_en) %}{{ t('line_type_desc.' ~ l.line_type) }}{% endif %}</td>
+    <td class="num">{{ money(l.budgeted_minor) }}{% if l.rollover_minor %}<div class="small muted">{{ t('budget.incl_rollover', amount=l.rollover_minor) }}</div>{% endif %}</td>
+    <td class="num">{{ money(l.actual_minor) }}</td>
+    <td class="num {{ 'neg' if l.remaining_minor < 0 }}">{{ money(l.remaining_minor) }}</td>
+    <td style="min-width:120px">{{ meter(l.pct_used, l.over_budget) }}<span class="small">{{ l.pct_used if l.pct_used is not none else '—' }}%</span></td>
+    <td class="num">{{ money(l.projected_minor) }}</td>
+    <td class="num">{{ money(l.prior_minor) }}{% if l.prior_change_pct is not none %}<div class="small muted">{{ '%+.1f'|format(l.prior_change_pct) }}%</div>{% endif %}</td>
+    <td>{% if l.over_budget %}<span class="badge critical">{{ t('budget.over') }}</span>{% elif l.at_risk %}<span class="badge warning">{{ t('budget.at_risk') }}</span>{% elif l.below_target %}<span class="badge info">{{ t('budget.below_target') }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="help">{{ t('budget.projection_note') }}</p>
+<form method="post" class="inline no-print">{{ csrf_input() }}
+  <label>{{ t('budget.copy_to') }} <input type="date" name="new_start" required></label><button class="ghost">{{ t('budget.copy') }}</button></form>
+{% endblock %}
